@@ -1,0 +1,6 @@
+# Release artifact - built with Compress-Archive, attached to GitHub Releases
+TimeTracker-v*.zip
+
+# Local backups exported from the app
+time-tracker-backup-*.json
+time-report-*.csv
