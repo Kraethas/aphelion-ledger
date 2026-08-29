@@ -170,6 +170,15 @@ tr.running{background:var(--green-soft)}
 .bar{height:8px;border-radius:99px;background:var(--accent);min-width:2px}
 .bartrack{background:var(--panel-2);border-radius:99px;overflow:hidden;width:100%}
 .hint{font-size:12.5px;color:var(--muted)}
+.kpi.alarm{background:var(--red-soft);border-color:var(--red)}
+.kpi.alarm .v{color:var(--red)}
+tr.grp td{
+  background:var(--panel-2);font-size:11.5px;text-transform:uppercase;
+  letter-spacing:.4px;font-weight:700;padding:7px 10px;
+}
+tr.grp td .muted{font-weight:600}
+tr.duerow{cursor:pointer}
+tr.duerow:hover{background:var(--accent-soft)}
 .entrylist{margin-top:8px;border-top:1px dashed var(--border)}
 </style>
 </head>
@@ -1179,6 +1188,121 @@ function rangeBounds(key) {
   }
 }
 
+/* ---------- upcoming work ---------- */
+
+function startOfToday() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/**
+ * Open tasks in the active container that carry a due date, split into
+ * mutually exclusive horizons so nothing is listed twice. Weeks end on Sunday,
+ * matching the "This week" time range.
+ */
+function dueBuckets() {
+  const c = activeContainer();
+  const DAY = 86400000;
+  const today = startOfToday();
+  const endOfToday = today + DAY - 1;
+  const dow = (new Date().getDay() + 6) % 7;            // Monday = 0
+  const endOfWeek = today + (6 - dow) * DAY + DAY - 1;  // Sunday, last moment
+  const end14 = today + 13 * DAY + DAY - 1;             // today + 13 more days
+
+  const items = [];
+  if (c) {
+    c.projects.forEach(function (p) {
+      p.tasks.forEach(function (t) {
+        if (!t.due || isTaskClosed(t)) return;
+        items.push({ project: p, task: t, due: new Date(t.due + "T23:59:59").getTime() });
+      });
+    });
+  }
+  items.sort(function (a, b) { return a.due - b.due; });
+
+  return {
+    overdue: items.filter(function (i) { return i.due < today; }),
+    today: items.filter(function (i) { return i.due >= today && i.due <= endOfToday; }),
+    week: items.filter(function (i) { return i.due > endOfToday && i.due <= endOfWeek; }),
+    later: items.filter(function (i) { return i.due > endOfWeek && i.due <= end14; })
+  };
+}
+
+function dueDayLabel(item) {
+  const d = new Date(item.task.due + "T00:00:00");
+  const date = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  // Whole calendar days between today and the due date, so wording never
+  // drifts with the time of day.
+  const diff = Math.round((d.getTime() - startOfToday()) / 86400000);
+  if (diff < 0) {
+    const late = -diff;
+    return { date: date, rel: late + (late === 1 ? " day" : " days") + " late", cls: "due-over" };
+  }
+  if (diff === 0) return { date: date, rel: "today", cls: "due-soon" };
+  if (diff === 1) return { date: date, rel: "tomorrow", cls: "due-soon" };
+  return { date: date, rel: "in " + diff + " days", cls: "" };
+}
+
+function dueRowsHTML(label, items, cls) {
+  if (!items.length) return "";
+  let html = '<tr class="grp"><td colspan="6"><span class="' + (cls || "") + '">' + esc(label) +
+    '</span> <span class="muted">' + items.length + "</span></td></tr>";
+  html += items.map(function (i) {
+    const d = dueDayLabel(i);
+    const mine = i.task.assignee === SELF;
+    return '<tr class="duerow" data-goto="' + i.project.id + '">' +
+      '<td class="nowrap"><b class="' + d.cls + '">' + esc(d.date) + "</b>" +
+        '<div class="small ' + (d.cls || "muted") + '">' + esc(d.rel) + "</div></td>" +
+      '<td><div class="ttitle">' + esc(i.task.title) + "</div>" +
+        '<div class="small muted">' + esc(i.task.type) + "</div></td>" +
+      "<td>" + esc(i.project.name) + "</td>" +
+      '<td><span class="badge ' + TASK_STATUS_CLASS[i.task.status] + '">' + esc(i.task.status) + "</span></td>" +
+      '<td><span class="who">' + (mine ? '<span class="me">Myself</span>'
+        : '<span class="other">' + esc(i.task.assignee) + "</span>") + "</span></td>" +
+      '<td class="right mono nowrap">' + fmtDur(taskTotalMs(i.task)) + "</td>" +
+      "</tr>";
+  }).join("");
+  return html;
+}
+
+function dueSectionHTML() {
+  const b = dueBuckets();
+  const dueToday = b.today.length;
+  const dueThisWeek = dueToday + b.week.length;          // today through Sunday
+  const dueNext14 = dueThisWeek + b.later.length;        // today through +13 days
+  const total = b.overdue.length + dueNext14;
+
+  let html = '<div class="card" style="margin-bottom:16px">' +
+    '<div class="head"><h3 style="flex:1">What&rsquo;s due</h3>' +
+      '<span class="small muted">Open tasks with a due date</span></div>' +
+    '<div class="body">' +
+      '<div class="kpis">' +
+        '<div class="kpi' + (b.overdue.length ? " alarm" : "") + '"><div class="v mono">' + b.overdue.length +
+          '</div><div class="k">Overdue</div></div>' +
+        '<div class="kpi"><div class="v mono">' + dueToday + '</div><div class="k">Due today</div></div>' +
+        '<div class="kpi"><div class="v mono">' + dueThisWeek + '</div><div class="k">Due this week</div></div>' +
+        '<div class="kpi"><div class="v mono">' + dueNext14 + '</div><div class="k">Due next 14 days</div></div>' +
+      "</div>" +
+    "</div>";
+
+  if (!total) {
+    html += '<div class="empty">Nothing due in the next 14 days.<br>' +
+      '<span class="hint">Only open tasks with a due date appear here.</span></div>';
+  } else {
+    html += '<div style="overflow:auto"><table><thead><tr>' +
+      "<th>Due</th><th>Task</th><th>Project</th><th>Status</th><th>Assigned to</th><th class=\"right\">Logged</th>" +
+      "</tr></thead><tbody>" +
+      dueRowsHTML("Overdue", b.overdue, "due-over") +
+      dueRowsHTML("Today", b.today, "due-soon") +
+      dueRowsHTML("Rest of this week", b.week, "") +
+      dueRowsHTML("Next 14 days", b.later, "") +
+      "</tbody></table></div>" +
+      '<div class="body"><span class="hint">Click any task to jump to its project. ' +
+      "Completed and cancelled tasks are left out.</span></div>";
+  }
+  return html + "</div>";
+}
+
 /** All entries in the active container, clipped to the selected range. */
 function collectRows() {
   const c = activeContainer();
@@ -1227,8 +1351,10 @@ function reportsHTML() {
 
   let html = '<div style="max-width:1500px;margin:0 auto">';
 
+  html += dueSectionHTML();
+
   html += '<div class="card" style="margin-bottom:16px"><div class="body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
-    "<b>" + esc(c ? c.name : "") + "</b>" +
+    '<b>Time logged</b><span class="muted small">' + esc(c ? c.name : "") + "</span>" +
     '<select id="rangeSel" style="width:auto">' +
       Object.keys(RANGES).map(function (k) {
         return '<option value="' + k + '"' + (k === state.ui.range ? " selected" : "") + ">" + esc(RANGES[k]) + "</option>";
@@ -1282,6 +1408,16 @@ function reportsHTML() {
 }
 
 function wireReports() {
+  document.querySelectorAll("#view [data-goto]").forEach(function (row) {
+    row.onclick = function () {
+      state.ui.projectId = row.getAttribute("data-goto");
+      state.ui.view = "projects";
+      state.ui.openEntries = null;
+      save();
+      render();
+      window.scrollTo(0, 0);
+    };
+  });
   const sel = document.getElementById("rangeSel");
   if (sel) sel.onchange = function () { state.ui.range = sel.value; save(); render(); };
   const csv = document.getElementById("csvBtn");

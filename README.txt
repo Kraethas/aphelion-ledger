@@ -79,8 +79,15 @@ press Stop.
   details  - under each task, lists every recorded session so you can delete
              one you left running overnight by mistake.
 
-REPORTS shows the active container's time by project, by type of work, and by
-department, for a period you choose (today / this week / this month / last 7 /
+REPORTS opens with WHAT'S DUE: counts of overdue tasks, tasks due today, due
+this week (through Sunday), and due in the next 14 days, followed by the tasks
+themselves grouped by how soon they are due. Only open tasks with a due date
+appear - completed and cancelled ones drop out. Click any task to jump to its
+project. Overdue is included because a task due yesterday belongs in none of
+the other three groups.
+
+Below that, TIME LOGGED shows the active container's time by project, by type
+of work, and by department, for a period you choose (today / this week / this month / last 7 /
 last 30 / all time), plus a task-by-task breakdown. Export CSV gives you the
 whole thing as a spreadsheet - one row per session, with a total - which opens
 straight in Excel.
