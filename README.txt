@@ -57,10 +57,10 @@ Each task also carries:
                 In Review / Approval, Paused, Completed, Cancelled.
                 Completed and Cancelled tasks are struck through and drop out
                 of the project's "open tasks" count.
-  Assigned to - "Myself" by default, or type anyone's name. This is just a
-                label for who is holding the task and where you are waiting on
-                an answer from - it does not share anything with anyone.
-                Names you have used before are offered as you type.
+  Assigned to - picked from the container's MEMBERS list (see below). This is
+                just a label for who is holding the task and where you are
+                waiting on an answer from - it does not share anything with
+                anyone and sends no e-mail.
   Dates       - Date started and Due date. A due date turns amber in its last
                 week and red once overdue, and stops nagging once the task is
                 Completed or Cancelled.
@@ -78,6 +78,15 @@ press Stop.
   + Time   - add time by hand for work you did away from the timer.
   details  - under each task, lists every recorded session so you can delete
              one you left running overnight by mistake.
+
+MEMBERS is the list of people you can assign tasks to. Each container keeps
+its own list, so work colleagues do not appear in Personal. Every list starts
+with "Myself", which can be renamed but not removed. A member needs a Name;
+Team and E-mail are optional. You can also add someone without leaving the
+task form - pick "+ Add someone new..." in the Assigned to dropdown.
+
+Renaming a member updates every task assigned to them. Removing a member asks
+first, and reassigns their tasks to Myself rather than losing them.
 
 REPORTS opens with WHAT'S DUE: counts of overdue tasks, tasks due today, due
 this week (through Sunday), and due in the next 14 days, followed by the tasks

@@ -193,6 +193,7 @@ tr.duerow:hover{background:var(--accent-soft)}
   <div class="tabs">
     <button class="tab" data-view="projects">Projects</button>
     <button class="tab" data-view="reports">Reports</button>
+    <button class="tab" data-view="members">Members</button>
   </div>
   <div class="sep"></div>
   <span class="badge" id="storeChip" title="Whether this browser is allowed to save your data locally"></span>
@@ -269,18 +270,41 @@ function isTaskClosed(t) {
 }
 
 const SELF = "Myself";
+const NEW_MEMBER = "__new__";
 
-/** Everyone a task has ever been assigned to, for the assignment picker. */
-function knownAssignees() {
-  const set = new Set([SELF]);
-  state.containers.forEach(function (c) {
-    c.projects.forEach(function (p) {
-      p.tasks.forEach(function (t) {
-        if (t.assignee && t.assignee.trim()) set.add(t.assignee.trim());
-      });
-    });
+/* ---------- members ----------
+   Each container keeps its own list of people, because containers hold
+   separate worlds: your work colleagues have no business in Personal. */
+
+function containerMembers(c) {
+  return (c && Array.isArray(c.members)) ? c.members : [];
+}
+function findMember(c, id) {
+  return containerMembers(c).find(function (m) { return m.id === id; }) || null;
+}
+function selfMember(c) {
+  const list = containerMembers(c);
+  return list.find(function (m) { return m.self; }) || list[0] || null;
+}
+function memberName(c, id) {
+  const m = findMember(c, id);
+  return m ? m.name : "Unassigned";
+}
+/** Options for an assignment dropdown: every member, then "add someone new". */
+function memberOptions(c) {
+  const opts = containerMembers(c).map(function (m) {
+    return { value: m.id, label: m.team ? m.name + " — " + m.team : m.name };
   });
-  return Array.from(set);
+  opts.push({ value: NEW_MEMBER, label: "+ Add someone new…" });
+  return opts;
+}
+/** How many tasks in this container point at a given member. */
+function memberTaskCount(c, id) {
+  let n = 0;
+  c.projects.forEach(function (p) {
+    p.tasks.forEach(function (t) { if (t.assigneeId === id) n++; });
+  });
+  return n;
 }
 
 /** Shared validation for the new-task and edit-task forms. */
@@ -341,12 +365,26 @@ function normalise() {
     state.containers = defaultState().containers;
   }
   state.ui = state.ui || {};
-  state.ui.view = state.ui.view === "reports" ? "reports" : "projects";
+  state.ui.view = ["reports", "members"].indexOf(state.ui.view) >= 0 ? state.ui.view : "projects";
   state.ui.range = state.ui.range || "all";
   state.containers.forEach(function (c) {
     c.id = c.id || uid();
     c.name = c.name || "Untitled";
     c.projects = Array.isArray(c.projects) ? c.projects : [];
+
+    // Every container has a member list, and it always starts with you.
+    c.members = Array.isArray(c.members) ? c.members : [];
+    c.members.forEach(function (m) {
+      m.id = m.id || uid();
+      m.name = (m.name || "").trim() || "Unnamed";
+      m.team = m.team || "";
+      m.email = m.email || "";
+      m.self = !!m.self;
+    });
+    if (!c.members.some(function (m) { return m.self; })) {
+      c.members.unshift({ id: uid(), name: SELF, team: "", email: "", self: true });
+    }
+    const me = selfMember(c);
     c.projects.forEach(function (p) {
       p.id = p.id || uid();
       p.name = p.name || "Untitled project";
@@ -372,7 +410,25 @@ function normalise() {
           ? t.status
           : (t.done ? "Completed" : "Not Started");
         delete t.done;
-        t.assignee = (typeof t.assignee === "string" && t.assignee.trim()) ? t.assignee.trim() : SELF;
+        // Free-text assignees become real member records, matched by name.
+        if (!t.assigneeId || !findMember(c, t.assigneeId)) {
+          const written = (typeof t.assignee === "string") ? t.assignee.trim() : "";
+          if (!written || written === SELF) {
+            t.assigneeId = me.id;
+          } else {
+            const hit = c.members.find(function (m) {
+              return m.name.toLowerCase() === written.toLowerCase();
+            });
+            if (hit) {
+              t.assigneeId = hit.id;
+            } else {
+              const added = { id: uid(), name: written, team: "", email: "", self: false };
+              c.members.push(added);
+              t.assigneeId = added.id;
+            }
+          }
+        }
+        delete t.assignee;
         t.started = t.started || "";
         t.due = t.due || "";
         t.entries = Array.isArray(t.entries) ? t.entries : [];
@@ -569,8 +625,11 @@ function openModal(opts) {
       html += '<textarea id="' + id + '">' + esc(f.value || "") + "</textarea>";
     } else if (f.type === "select") {
       html += '<select id="' + id + '">';
+      // Options are plain strings, or {value,label} when the label differs.
       (f.options || []).forEach(function (o) {
-        html += '<option value="' + esc(o) + '"' + (o === f.value ? " selected" : "") + ">" + esc(o) + "</option>";
+        const val = (o && typeof o === "object") ? o.value : o;
+        const lab = (o && typeof o === "object") ? o.label : o;
+        html += '<option value="' + esc(val) + '"' + (val === f.value ? " selected" : "") + ">" + esc(lab) + "</option>";
       });
       html += "</select>";
     } else if (f.type === "combo") {
@@ -638,8 +697,16 @@ function render() {
     b.classList.toggle("active", b.getAttribute("data-view") === state.ui.view);
   });
   const view = document.getElementById("view");
-  view.innerHTML = state.ui.view === "reports" ? reportsHTML() : projectsHTML();
-  if (state.ui.view === "reports") wireReports(); else wireProjects();
+  if (state.ui.view === "reports") {
+    view.innerHTML = reportsHTML();
+    wireReports();
+  } else if (state.ui.view === "members") {
+    view.innerHTML = membersHTML();
+    wireMembers();
+  } else {
+    view.innerHTML = projectsHTML();
+    wireProjects();
+  }
 }
 
 function renderContainerTabs() {
@@ -866,7 +933,9 @@ function taskRowHTML(p, t) {
   const startedTxt = t.started
     ? new Date(t.started + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" })
     : "—";
-  const mine = t.assignee === SELF;
+  const c = activeContainer();
+  const member = findMember(c, t.assigneeId);
+  const mine = !!(member && member.self);
   let row =
     '<tr class="' + (running ? "running" : "") + '">' +
       '<td><div class="ttitle' + (closed ? " closed" : "") + '">' + esc(t.title) + "</div>" +
@@ -876,8 +945,9 @@ function taskRowHTML(p, t) {
       '<td><span class="type-pill">' + esc(t.type) + "</span></td>" +
       '<td><span class="badge ' + TASK_STATUS_CLASS[t.status] + '">' + esc(t.status) + "</span></td>" +
       '<td><span class="who">' + (mine
-        ? '<span class="me">Myself</span>'
-        : '<span class="other">' + esc(t.assignee) + "</span>") + "</span></td>" +
+        ? '<span class="me">' + esc(member.name) + "</span>"
+        : '<span class="other">' + esc(member ? member.name : "Unassigned") + "</span>") + "</span>" +
+        (member && member.team && !mine ? '<div class="small muted">' + esc(member.team) + "</div>" : "") + "</td>" +
       '<td><div class="dates">' +
         "<div><span>Started</span> <b>" + esc(startedTxt) + "</b></div>" +
         '<div><span>Due</span> <b class="' + due.cls + '">' + esc(due.text) + "</b></div>" +
@@ -1041,8 +1111,8 @@ function wireProjects() {
         { key: "title", label: "Task", value: "", placeholder: "e.g. Kick-off call with Finance" },
         { key: "type", label: "Type of work", type: "select", options: TASK_TYPES, value: TASK_TYPES[1] },
         { key: "status", label: "Status", type: "select", options: TASK_STATUSES, value: TASK_STATUSES[0] },
-        { key: "assignee", label: "Assigned to", type: "combo", options: knownAssignees(), value: SELF,
-          placeholder: "Myself, or type a name" },
+        { key: "assigneeId", label: "Assigned to", type: "select", options: memberOptions(c),
+          value: selfMember(c).id },
         { key: "started", label: "Date started", type: "date", value: "" },
         { key: "due", label: "Due date", type: "date", value: "" },
         { key: "notes", label: "Notes (optional)", type: "textarea", value: "" }
@@ -1050,13 +1120,20 @@ function wireProjects() {
       okLabel: "Add task",
       validate: validateTaskDates,
       onSubmit: function (v) {
-        p.tasks.push({
-          id: uid(), title: v.title.trim(), type: v.type, status: v.status,
-          assignee: v.assignee.trim() || SELF, started: v.started, due: v.due,
-          notes: v.notes.trim(), entries: []
-        });
-        save();
-        render();
+        function create(assigneeId) {
+          p.tasks.push({
+            id: uid(), title: v.title.trim(), type: v.type, status: v.status,
+            assigneeId: assigneeId, started: v.started, due: v.due,
+            notes: v.notes.trim(), entries: []
+          });
+          save();
+          render();
+        }
+        if (v.assigneeId === NEW_MEMBER) {
+          openMemberModal(c, null, function (m) { create(m.id); });
+        } else {
+          create(v.assigneeId);
+        }
       }
     });
   };
@@ -1078,8 +1155,8 @@ function wireProjects() {
           { key: "title", label: "Task", value: t.title },
           { key: "type", label: "Type of work", type: "select", options: TASK_TYPES, value: t.type },
           { key: "status", label: "Status", type: "select", options: TASK_STATUSES, value: t.status },
-          { key: "assignee", label: "Assigned to", type: "combo", options: knownAssignees(), value: t.assignee,
-            placeholder: "Myself, or type a name" },
+          { key: "assigneeId", label: "Assigned to", type: "select", options: memberOptions(c),
+            value: t.assigneeId },
           { key: "started", label: "Date started", type: "date", value: t.started },
           { key: "due", label: "Due date", type: "date", value: t.due },
           { key: "notes", label: "Notes", type: "textarea", value: t.notes }
@@ -1087,10 +1164,17 @@ function wireProjects() {
         validate: validateTaskDates,
         onSubmit: function (v) {
           t.title = v.title.trim(); t.type = v.type; t.status = v.status;
-          t.assignee = v.assignee.trim() || SELF; t.started = v.started; t.due = v.due;
-          t.notes = v.notes.trim();
-          save();
-          render();
+          t.started = v.started; t.due = v.due; t.notes = v.notes.trim();
+          function finish(assigneeId) {
+            t.assigneeId = assigneeId;
+            save();
+            render();
+          }
+          if (v.assigneeId === NEW_MEMBER) {
+            openMemberModal(c, null, function (m) { finish(m.id); });
+          } else {
+            finish(v.assigneeId);
+          }
         }
       });
     };
@@ -1188,6 +1272,113 @@ function rangeBounds(key) {
   }
 }
 
+/* =========================================================
+   Members
+   ========================================================= */
+
+/** Add or edit a person. onDone receives the member, for chained flows. */
+function openMemberModal(c, existing, onDone) {
+  openModal({
+    title: existing ? "Edit member" : "New member",
+    intro: existing ? null : "Only a name is required.",
+    fields: [
+      { key: "name", label: "Name", value: existing ? existing.name : "", placeholder: "e.g. Mark Reilly" },
+      { key: "team", label: "Team (optional)", value: existing ? existing.team : "", placeholder: "e.g. Infrastructure" },
+      { key: "email", label: "E-mail (optional)", value: existing ? existing.email : "" }
+    ],
+    okLabel: existing ? "Save" : "Add member",
+    validate: function (v) {
+      const name = v.name.trim();
+      if (!name) return "Name is required.";
+      const clash = containerMembers(c).some(function (m) {
+        return m !== existing && m.name.toLowerCase() === name.toLowerCase();
+      });
+      if (clash) return "There is already a member called " + name + " in this container.";
+      return null;
+    },
+    onSubmit: function (v) {
+      let m = existing;
+      if (m) {
+        m.name = v.name.trim(); m.team = v.team.trim(); m.email = v.email.trim();
+      } else {
+        m = { id: uid(), name: v.name.trim(), team: v.team.trim(), email: v.email.trim(), self: false };
+        c.members.push(m);
+      }
+      save();
+      if (onDone) onDone(m); else render();
+    }
+  });
+}
+
+function membersHTML() {
+  const c = activeContainer();
+  const members = containerMembers(c);
+
+  let html = '<div style="max-width:900px;margin:0 auto"><div class="card">' +
+    '<div class="head"><h3 style="flex:1">Members of ' + esc(c ? c.name : "") + "</h3>" +
+      '<button class="btn sm primary" data-act="newMember">+ Member</button></div>';
+
+  html += '<div style="overflow:auto"><table><thead><tr>' +
+    "<th>Name</th><th>Team</th><th>E-mail</th><th class=\"right\">Tasks</th><th class=\"right\">Actions</th>" +
+    "</tr></thead><tbody>" +
+    members.map(function (m) {
+      const n = memberTaskCount(c, m.id);
+      return "<tr>" +
+        '<td><div class="ttitle">' + esc(m.name) + "</div>" +
+          (m.self ? '<div class="small muted">That&rsquo;s you — cannot be removed</div>' : "") + "</td>" +
+        "<td>" + (m.team ? esc(m.team) : '<span class="muted">—</span>') + "</td>" +
+        "<td>" + (m.email
+          ? '<a href="mailto:' + esc(m.email) + '">' + esc(m.email) + "</a>"
+          : '<span class="muted">—</span>') + "</td>" +
+        '<td class="right mono">' + n + "</td>" +
+        '<td><div class="rowacts">' +
+          '<button class="btn sm ghost" data-edit-member="' + m.id + '">Edit</button>' +
+          (m.self ? "" : '<button class="btn sm ghost danger" data-del-member="' + m.id + '">&times;</button>') +
+        "</div></td></tr>";
+    }).join("") +
+    "</tbody></table></div>";
+
+  html += '<div class="body"><span class="hint">These are the people you can assign tasks to in this container. ' +
+    "They are labels for your own tracking — nothing is shared with them and no e-mail is ever sent.</span></div>";
+  return html + "</div></div>";
+}
+
+function wireMembers() {
+  const c = activeContainer();
+  const view = document.getElementById("view");
+
+  const add = view.querySelector('[data-act="newMember"]');
+  if (add) add.onclick = function () { openMemberModal(c, null, null); };
+
+  view.querySelectorAll("[data-edit-member]").forEach(function (b) {
+    b.onclick = function () {
+      const m = findMember(c, b.getAttribute("data-edit-member"));
+      if (m) openMemberModal(c, m, null);
+    };
+  });
+
+  view.querySelectorAll("[data-del-member]").forEach(function (b) {
+    b.onclick = function () {
+      const id = b.getAttribute("data-del-member");
+      const m = findMember(c, id);
+      if (!m || m.self) return;
+      const n = memberTaskCount(c, id);
+      const msg = n
+        ? "Remove " + m.name + "?\n\n" + n + " task" + (n === 1 ? "" : "s") +
+          " assigned to them will be reassigned to " + selfMember(c).name + "."
+        : "Remove " + m.name + "?";
+      if (!confirm(msg)) return;
+      const meId = selfMember(c).id;
+      c.projects.forEach(function (p) {
+        p.tasks.forEach(function (t) { if (t.assigneeId === id) t.assigneeId = meId; });
+      });
+      c.members = c.members.filter(function (x) { return x.id !== id; });
+      save();
+      render();
+    };
+  });
+}
+
 /* ---------- upcoming work ---------- */
 
 function startOfToday() {
@@ -1249,7 +1440,9 @@ function dueRowsHTML(label, items, cls) {
     '</span> <span class="muted">' + items.length + "</span></td></tr>";
   html += items.map(function (i) {
     const d = dueDayLabel(i);
-    const mine = i.task.assignee === SELF;
+    const dc = activeContainer();
+    const dm = findMember(dc, i.task.assigneeId);
+    const mine = !!(dm && dm.self);
     return '<tr class="duerow" data-goto="' + i.project.id + '">' +
       '<td class="nowrap"><b class="' + d.cls + '">' + esc(d.date) + "</b>" +
         '<div class="small ' + (d.cls || "muted") + '">' + esc(d.rel) + "</div></td>" +
@@ -1257,8 +1450,8 @@ function dueRowsHTML(label, items, cls) {
         '<div class="small muted">' + esc(i.task.type) + "</div></td>" +
       "<td>" + esc(i.project.name) + "</td>" +
       '<td><span class="badge ' + TASK_STATUS_CLASS[i.task.status] + '">' + esc(i.task.status) + "</span></td>" +
-      '<td><span class="who">' + (mine ? '<span class="me">Myself</span>'
-        : '<span class="other">' + esc(i.task.assignee) + "</span>") + "</span></td>" +
+      '<td><span class="who">' + (mine ? '<span class="me">' + esc(dm.name) + "</span>"
+        : '<span class="other">' + esc(dm ? dm.name : "Unassigned") + "</span>") + "</span></td>" +
       '<td class="right mono nowrap">' + fmtDur(taskTotalMs(i.task)) + "</td>" +
       "</tr>";
   }).join("");
@@ -1463,7 +1656,7 @@ function exportCSV() {
   rows.sort(function (a, b) { return a.start - b.start; }).forEach(function (r) {
     lines.push([
       c.name, r.project.name, r.project.status, r.project.person, r.project.department,
-      r.task.title, r.task.type, r.task.status, r.task.assignee, r.task.started, r.task.due,
+      r.task.title, r.task.type, r.task.status, memberName(c, r.task.assigneeId), r.task.started, r.task.due,
       fmtDateTime(r.start), fmtDateTime(r.end), fmtDur(r.ms), fmtHours(r.ms)
     ].map(csvCell).join(","));
   });
