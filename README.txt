@@ -1,10 +1,10 @@
-APHELION TIME TRACKER
-=====================
+APHELION LEDGER
+===============
 A portable, no-install project & task time tracker, in Aphelion colours.
 
 HOW TO RUN
 ----------
-Double-click TimeTracker.html. It opens in your default browser (Chrome, Edge,
+Double-click AphelionLedger.html. It opens in your default browser (Chrome, Edge,
 or Firefox) and runs entirely on your own machine. There is nothing to install,
 no admin rights needed, and it never connects to the internet.
 
@@ -22,7 +22,7 @@ storage - use Backup (below) to keep your data in a file instead.
 
 Two things to know:
   * Data is tied to the browser AND to where the file sits. If you move
-    TimeTracker.html to a different folder, or open it in a different browser,
+    AphelionLedger.html to a different folder, or open it in a different browser,
     it starts empty. Pick one home for the file and stick to it.
   * Clearing your browser's "cookies and site data" will erase it.
     So take backups.
@@ -103,7 +103,7 @@ straight in Excel.
 
 SHARING IT
 ----------
-TimeTracker.html is one self-contained file with no dependencies. The Aphelion
+AphelionLedger.html is one self-contained file with no dependencies. The Aphelion
 mark in the top-left is drawn as inline SVG rather than loaded from anywhere,
 so the app never reaches out to the network and works fully offline. E-mail it,
 zip it, or put it on GitHub. Whoever opens it gets an empty tracker of their
