@@ -223,6 +223,11 @@ last 30 / all time), plus a task-by-task breakdown. Export CSV gives you the
 whole thing as a spreadsheet - one row per session, with a total - which opens
 straight in Excel.
 
+SUPPORT
+-------
+Ledger is free and always will be. If it saves you a spreadsheet or earns a
+place at your table, there is a tip jar at ko-fi.com/kraethas.
+
 SHARING IT
 ----------
 AphelionLedger.html is one self-contained file with no dependencies. The Aphelion
