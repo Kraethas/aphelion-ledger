@@ -106,6 +106,24 @@ main{flex:1 1 auto;overflow:auto;padding:16px;display:block}
 .s-done{background:var(--green-soft);color:var(--green)}
 .s-rec{background:var(--purple-soft);color:var(--purple)}
 
+/* task statuses */
+.t-ns{background:var(--panel-2);color:var(--muted);border:1px solid var(--border)}
+.t-prog{background:var(--accent-soft);color:var(--accent)}
+.t-wait{background:var(--amber-soft);color:var(--amber)}
+.t-rev{background:var(--purple-soft);color:var(--purple)}
+.t-pause{background:var(--panel-2);color:var(--muted);border:1px dashed var(--border-strong,var(--muted))}
+.t-done{background:var(--green-soft);color:var(--green)}
+.t-cancel{background:var(--red-soft);color:var(--red)}
+
+/* assignment + dates in the task table */
+.who{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.who .me{color:var(--muted)}
+.who .other{font-weight:600}
+.dates{display:flex;flex-direction:column;gap:2px;font-size:12px;white-space:nowrap}
+.dates span{color:var(--muted)}
+.dates b{font-weight:600;color:var(--text)}
+.closed{text-decoration:line-through;opacity:.55}
+
 /* ---------- forms ---------- */
 .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);font-weight:600}
@@ -216,6 +234,55 @@ const TASK_TYPES = [
   "Other"
 ];
 
+const TASK_STATUSES = [
+  "Not Started",
+  "In Progress",
+  "Waiting on Other Person/Team",
+  "In Review / Approval",
+  "Paused",
+  "Completed",
+  "Cancelled"
+];
+
+const TASK_STATUS_CLASS = {
+  "Not Started": "t-ns",
+  "In Progress": "t-prog",
+  "Waiting on Other Person/Team": "t-wait",
+  "In Review / Approval": "t-rev",
+  "Paused": "t-pause",
+  "Completed": "t-done",
+  "Cancelled": "t-cancel"
+};
+
+/* Statuses that take a task off your plate - used for "open" counts and styling. */
+function isTaskClosed(t) {
+  return t.status === "Completed" || t.status === "Cancelled";
+}
+
+const SELF = "Myself";
+
+/** Everyone a task has ever been assigned to, for the assignment picker. */
+function knownAssignees() {
+  const set = new Set([SELF]);
+  state.containers.forEach(function (c) {
+    c.projects.forEach(function (p) {
+      p.tasks.forEach(function (t) {
+        if (t.assignee && t.assignee.trim()) set.add(t.assignee.trim());
+      });
+    });
+  });
+  return Array.from(set);
+}
+
+/** Shared validation for the new-task and edit-task forms. */
+function validateTaskDates(v) {
+  if (!v.title.trim()) return "Task name is required.";
+  if (v.started && v.due && v.due < v.started) {
+    return "The due date is before the start date. Swap them, or clear one.";
+  }
+  return null;
+}
+
 /* =========================================================
    State
    ========================================================= */
@@ -291,7 +358,14 @@ function normalise() {
         t.title = t.title || "Untitled task";
         t.type = TASK_TYPES.indexOf(t.type) >= 0 ? t.type : "Other";
         t.notes = t.notes || "";
-        t.done = !!t.done;
+        // v1.0 tasks carried a done flag; it becomes a status.
+        t.status = TASK_STATUSES.indexOf(t.status) >= 0
+          ? t.status
+          : (t.done ? "Completed" : "Not Started");
+        delete t.done;
+        t.assignee = (typeof t.assignee === "string" && t.assignee.trim()) ? t.assignee.trim() : SELF;
+        t.started = t.started || "";
+        t.due = t.due || "";
         t.entries = Array.isArray(t.entries) ? t.entries : [];
         t.entries.forEach(function (e) {
           e.id = e.id || uid();
@@ -426,6 +500,13 @@ function esc(s) {
 function startTimer(containerId, projectId, taskId) {
   if (state.running) stopTimer(true);
   state.running = { containerId: containerId, projectId: projectId, taskId: taskId, startedAt: now() };
+  // Working on something is the moment it started, so fill these in - but only
+  // when they are still untouched, never overriding what you set by hand.
+  const t = findTask(state.running);
+  if (t) {
+    if (!t.started) t.started = todayISO();
+    if (t.status === "Not Started") t.status = "In Progress";
+  }
   save();
   render();
 }
@@ -483,6 +564,13 @@ function openModal(opts) {
         html += '<option value="' + esc(o) + '"' + (o === f.value ? " selected" : "") + ">" + esc(o) + "</option>";
       });
       html += "</select>";
+    } else if (f.type === "combo") {
+      // Free text, with previously used values offered as suggestions.
+      html += '<input type="text" id="' + id + '" list="' + id + '_list" value="' + esc(f.value || "") +
+        '" placeholder="' + esc(f.placeholder || "") + '">' +
+        '<datalist id="' + id + '_list">' +
+        (f.options || []).map(function (o) { return '<option value="' + esc(o) + '"></option>'; }).join("") +
+        "</datalist>";
     } else if (f.type === "date") {
       html += '<input type="date" id="' + id + '" value="' + esc(f.value || "") + '">';
     } else if (f.type === "number") {
@@ -658,7 +746,7 @@ function emptyDetailHTML() {
 
 function projectDetailHTML(p) {
   const total = projectTotalMs(p);
-  const openTasks = p.tasks.filter(function (t) { return !t.done; }).length;
+  const openTasks = p.tasks.filter(function (t) { return !isTaskClosed(t); }).length;
 
   /* --- details card --- */
   let html =
@@ -714,7 +802,8 @@ function projectDetailHTML(p) {
     html += '<div class="empty">No tasks yet. Add one, then hit <b>Start</b> to track time against it.</div>';
   } else {
     html += '<div style="overflow:auto"><table><thead><tr>' +
-      "<th>Task</th><th>Type</th><th class=\"right\">Time</th><th class=\"right\">Actions</th>" +
+      "<th>Task</th><th>Type</th><th>Status</th><th>Assigned to</th><th>Dates</th>" +
+      "<th class=\"right\">Time</th><th class=\"right\">Actions</th>" +
       "</tr></thead><tbody>" +
       p.tasks.map(function (t) { return taskRowHTML(p, t); }).join("") +
       "</tbody></table></div>";
@@ -747,16 +836,43 @@ function milestoneHTML(m) {
     "</div>";
 }
 
+/** Short "12 Aug" style date, with overdue/soon flagging for live tasks. */
+function dueInfo(dateStr, closed) {
+  if (!dateStr) return { text: "—", cls: "" };
+  const d = new Date(dateStr + "T00:00:00");
+  const text = d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (closed) return { text: text, cls: "" };
+  const days = Math.ceil((new Date(dateStr + "T23:59:59") - now()) / 86400000);
+  if (days < 0) return { text: text + " · overdue", cls: "due-over" };
+  if (days === 0) return { text: text + " · today", cls: "due-soon" };
+  if (days <= 7) return { text: text + " · " + days + "d", cls: "due-soon" };
+  return { text: text, cls: "" };
+}
+
 function taskRowHTML(p, t) {
   const running = isRunningTask(t);
+  const closed = isTaskClosed(t);
   const entries = t.entries.slice().sort(function (a, b) { return b.start - a.start; });
+  const due = dueInfo(t.due, closed);
+  const startedTxt = t.started
+    ? new Date(t.started + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" })
+    : "—";
+  const mine = t.assignee === SELF;
   let row =
     '<tr class="' + (running ? "running" : "") + '">' +
-      '<td><div class="ttitle"' + (t.done ? ' style="text-decoration:line-through;opacity:.6"' : "") + ">" + esc(t.title) + "</div>" +
+      '<td><div class="ttitle' + (closed ? " closed" : "") + '">' + esc(t.title) + "</div>" +
         (t.notes ? '<div class="small muted">' + esc(t.notes) + "</div>" : "") +
         '<div class="small muted">' + entries.length + " session" + (entries.length === 1 ? "" : "s") +
           (entries.length ? ' · <a href="#" data-entries="' + t.id + '">details</a>' : "") + "</div></td>" +
       '<td><span class="type-pill">' + esc(t.type) + "</span></td>" +
+      '<td><span class="badge ' + TASK_STATUS_CLASS[t.status] + '">' + esc(t.status) + "</span></td>" +
+      '<td><span class="who">' + (mine
+        ? '<span class="me">Myself</span>'
+        : '<span class="other">' + esc(t.assignee) + "</span>") + "</span></td>" +
+      '<td><div class="dates">' +
+        "<div><span>Started</span> <b>" + esc(startedTxt) + "</b></div>" +
+        '<div><span>Due</span> <b class="' + due.cls + '">' + esc(due.text) + "</b></div>" +
+      "</div></td>" +
       '<td class="right mono nowrap" data-live-task="' + t.id + '">' + fmtClock(taskTotalMs(t)) + "</td>" +
       '<td><div class="rowacts">' +
         (running
@@ -769,7 +885,7 @@ function taskRowHTML(p, t) {
     "</tr>";
 
   if (state.ui.openEntries === t.id) {
-    row += '<tr><td colspan="4" style="background:var(--panel-2)">' +
+    row += '<tr><td colspan="7" style="background:var(--panel-2)">' +
       '<div class="small muted" style="margin-bottom:6px"><b>Logged sessions</b> — delete any that were left running by mistake.</div>' +
       (entries.length
         ? entries.map(function (e) {
@@ -915,12 +1031,21 @@ function wireProjects() {
       fields: [
         { key: "title", label: "Task", value: "", placeholder: "e.g. Kick-off call with Finance" },
         { key: "type", label: "Type of work", type: "select", options: TASK_TYPES, value: TASK_TYPES[1] },
+        { key: "status", label: "Status", type: "select", options: TASK_STATUSES, value: TASK_STATUSES[0] },
+        { key: "assignee", label: "Assigned to", type: "combo", options: knownAssignees(), value: SELF,
+          placeholder: "Myself, or type a name" },
+        { key: "started", label: "Date started", type: "date", value: "" },
+        { key: "due", label: "Due date", type: "date", value: "" },
         { key: "notes", label: "Notes (optional)", type: "textarea", value: "" }
       ],
       okLabel: "Add task",
-      validate: function (v) { return v.title.trim() ? null : "Task name is required."; },
+      validate: validateTaskDates,
       onSubmit: function (v) {
-        p.tasks.push({ id: uid(), title: v.title.trim(), type: v.type, notes: v.notes.trim(), done: false, entries: [] });
+        p.tasks.push({
+          id: uid(), title: v.title.trim(), type: v.type, status: v.status,
+          assignee: v.assignee.trim() || SELF, started: v.started, due: v.due,
+          notes: v.notes.trim(), entries: []
+        });
         save();
         render();
       }
@@ -943,12 +1068,18 @@ function wireProjects() {
         fields: [
           { key: "title", label: "Task", value: t.title },
           { key: "type", label: "Type of work", type: "select", options: TASK_TYPES, value: t.type },
-          { key: "notes", label: "Notes", type: "textarea", value: t.notes },
-          { key: "done", label: "Completed?", type: "select", options: ["No", "Yes"], value: t.done ? "Yes" : "No" }
+          { key: "status", label: "Status", type: "select", options: TASK_STATUSES, value: t.status },
+          { key: "assignee", label: "Assigned to", type: "combo", options: knownAssignees(), value: t.assignee,
+            placeholder: "Myself, or type a name" },
+          { key: "started", label: "Date started", type: "date", value: t.started },
+          { key: "due", label: "Due date", type: "date", value: t.due },
+          { key: "notes", label: "Notes", type: "textarea", value: t.notes }
         ],
-        validate: function (v) { return v.title.trim() ? null : "Task name is required."; },
+        validate: validateTaskDates,
         onSubmit: function (v) {
-          t.title = v.title.trim(); t.type = v.type; t.notes = v.notes.trim(); t.done = v.done === "Yes";
+          t.title = v.title.trim(); t.type = v.type; t.status = v.status;
+          t.assignee = v.assignee.trim() || SELF; t.started = v.started; t.due = v.due;
+          t.notes = v.notes.trim();
           save();
           render();
         }
@@ -1190,16 +1321,18 @@ function csvCell(v) {
 function exportCSV() {
   const c = activeContainer();
   const rows = collectRows();
-  const header = ["Container", "Project", "Status", "Person", "Department", "Task", "Type", "Start", "End", "Duration", "Hours"];
+  const header = ["Container", "Project", "Project Status", "Person", "Department", "Task", "Type",
+    "Task Status", "Assigned To", "Date Started", "Due Date", "Start", "End", "Duration", "Hours"];
   const lines = [header.map(csvCell).join(",")];
   rows.sort(function (a, b) { return a.start - b.start; }).forEach(function (r) {
     lines.push([
       c.name, r.project.name, r.project.status, r.project.person, r.project.department,
-      r.task.title, r.task.type, fmtDateTime(r.start), fmtDateTime(r.end), fmtDur(r.ms), fmtHours(r.ms)
+      r.task.title, r.task.type, r.task.status, r.task.assignee, r.task.started, r.task.due,
+      fmtDateTime(r.start), fmtDateTime(r.end), fmtDur(r.ms), fmtHours(r.ms)
     ].map(csvCell).join(","));
   });
   const total = rows.reduce(function (s, r) { return s + r.ms; }, 0);
-  lines.push(["", "", "", "", "", "", "", "", "TOTAL", fmtDur(total), fmtHours(total)].map(csvCell).join(","));
+  lines.push(["", "", "", "", "", "", "", "", "", "", "", "", "TOTAL", fmtDur(total), fmtHours(total)].map(csvCell).join(","));
   download("time-report-" + c.name.replace(/[^\w-]+/g, "_") + "-" + stamp() + ".csv", lines.join("\r\n"), "text/csv;charset=utf-8");
 }
 

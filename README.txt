@@ -52,6 +52,23 @@ Work, Presentation/E-mail Preparation, Research & Analysis, Documentation,
 Review/QA/Testing, Planning & Scoping, Support & Troubleshooting, Training &
 Learning, Admin & Reporting, Travel, Other) and its own Start/Stop timer.
 
+Each task also carries:
+  Status      - Not Started, In Progress, Waiting on Other Person/Team,
+                In Review / Approval, Paused, Completed, Cancelled.
+                Completed and Cancelled tasks are struck through and drop out
+                of the project's "open tasks" count.
+  Assigned to - "Myself" by default, or type anyone's name. This is just a
+                label for who is holding the task and where you are waiting on
+                an answer from - it does not share anything with anyone.
+                Names you have used before are offered as you type.
+  Dates       - Date started and Due date. A due date turns amber in its last
+                week and red once overdue, and stops nagging once the task is
+                Completed or Cancelled.
+
+Pressing Start on a task that is still "Not Started" with no start date fills
+in today's date and moves it to "In Progress". It only ever does this when
+those fields are untouched, so anything you set by hand is left alone.
+
 TIMERS: press Start on a task and a green bar appears at the top of the window
 showing what is running. Only one timer runs at a time - starting a second task
 automatically stops and banks the first, so you can't double-count. A running
