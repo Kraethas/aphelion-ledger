@@ -37,6 +37,8 @@ Every good time tracker assumes it can install something or phone home. In regul
 - A **start date and due date**, with the same amber/red flagging.
 - **Manual time entry** for work done away from the timer, and a per-task session log so you can delete a timer you left running overnight.
 
+**Every table filters.** Tasks, the cast, members, what's due and the report detail all carry a filter row under their headings — dropdowns for columns with a fixed set of values (listing only what's actually there), free text for names and titles. Filters stack, and a bar reads *Showing 8 of 16 · Clear filters* whenever anything is hidden, so a filtered list is never mistaken for missing data.
+
 **Members** are the people you can assign work to, kept per container. Name is required; team and e-mail are optional. Purely labels for your own tracking — nothing is shared and no e-mail is ever sent.
 
 **Reports** open with what's due: counts of overdue, due today, due this week, and due within 14 days, followed by the items themselves grouped by how soon they land. Below that, time logged by project, by type of work, and by department, over a period you choose — with **CSV export** that opens straight in Excel.

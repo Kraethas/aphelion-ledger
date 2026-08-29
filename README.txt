@@ -210,6 +210,17 @@ straight from your disk - nothing is uploaded. Repeating meetings and all-day
 events are skipped for now, and it tells you how many it left out. Importing
 the same file twice will not create duplicates.
 
+FILTERS sit under the headings of every table - tasks/sessions, the cast,
+players, what's due, and the report detail. Columns with a fixed set of values
+(type, status, assigned to, state, system) give you a dropdown listing only the
+values actually present, so no choice ever returns nothing. Free-text columns
+(names, titles, e-mail) filter as you type. Filters stack: type "Live Session"
+plus status "Played" plus the word "vallaki" narrows to exactly that.
+
+While anything is filtered a bar reads "Showing 8 of 16" with a Clear filters
+button, so a filtered list can never be mistaken for missing data. Filters are
+remembered between sessions - the bar is how you notice.
+
 REPORTS opens with WHAT'S DUE: counts of overdue tasks, tasks due today, due
 this week (through Sunday), and due in the next 14 days, followed by the tasks
 themselves grouped by how soon they are due. Only open tasks with a due date

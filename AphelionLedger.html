@@ -242,6 +242,20 @@ tr.running{background:var(--green-soft)}
 .arcrow:last-child{border-bottom:none}
 .arcrow .an{flex:1;font-weight:600;font-size:13px;min-width:120px}
 .att{color:var(--accent);font-weight:600}
+tr.filters td{padding:4px 6px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+tr.filters input,tr.filters select{
+  padding:3px 6px;font-size:12px;border-radius:6px;background:var(--panel);
+  border:1px solid var(--border);width:100%;min-width:70px;
+}
+tr.filters input.on,tr.filters select.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+tr.filters input::placeholder{color:var(--muted);opacity:.7}
+.fnote{
+  padding:8px 14px;background:var(--accent-soft);color:var(--accent);
+  font-size:12.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  border-bottom:1px solid var(--border);
+}
+.fnote b{font-variant-numeric:tabular-nums}
+td.nomatch{text-align:center;color:var(--muted);padding:22px 10px;font-size:13px}
 .docs{display:flex;flex-direction:column;gap:2px}
 .docrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px dashed var(--border);flex-wrap:wrap}
 .docrow:last-of-type{border-bottom:none}
@@ -1104,6 +1118,8 @@ function render() {
     view.innerHTML = projectsHTML();
     wireProjects();
   }
+  wireFilters(view);
+  restoreFilterFocus();
 }
 
 function renderContainerTabs() {
@@ -1317,9 +1333,18 @@ function projectDetailHTML(p) {
     if (!p.roster.length) {
       html += '<div class="hint">No characters yet. Add one to record who is playing whom.</div>';
     } else {
-      html += '<div style="overflow:auto"><table><thead><tr><th>Character</th><th>Archetype</th>' +
-        "<th>Player</th><th>State</th><th class=\"right\">Actions</th></tr></thead><tbody>" +
-        p.roster.map(function (r) {
+      const ccols = [
+        { key: "name", label: "Character", type: "text", get: function (r) { return r.name; } },
+        { key: "arch", label: "Archetype", type: "text", get: function (r) { return r.archetype; } },
+        { key: "player", label: "Player", type: "select",
+          get: function (r) { return memberName(activeContainer(), r.memberId); } },
+        { key: "state", label: "State", type: "select", get: function (r) { return r.state; } },
+        { label: "Actions", right: true }
+      ];
+      const cshown = applyFilters("cast", ccols, p.roster);
+      html += filterNoteHTML("cast", cshown.length, p.roster.length);
+      html += '<div style="overflow:auto"><table>' + tableHeadHTML("cast", ccols, p.roster) + "<tbody>" +
+        cshown.map(function (r) {
           return "<tr>" +
             '<td><div class="ttitle' + (r.state === "Deceased" ? " closed" : "") + '">' + esc(r.name) + "</div>" +
               (r.note ? '<div class="small muted">' + esc(r.note) + "</div>" : "") + "</td>" +
@@ -1330,7 +1355,9 @@ function projectDetailHTML(p) {
               '<button class="btn sm ghost" data-edit-char="' + r.id + '">Edit</button>' +
               '<button class="btn sm ghost danger" data-del-char="' + r.id + '">&times;</button>' +
             "</div></td></tr>";
-        }).join("") + "</tbody></table></div>";
+        }).join("") +
+        (cshown.length ? "" : '<tr><td colspan="5" class="nomatch">Nothing matches these filters.</td></tr>') +
+        "</tbody></table></div>";
     }
     html += "</div></div>";
   }
@@ -1345,11 +1372,22 @@ function projectDetailHTML(p) {
     html += '<div class="empty">No ' + esc(lex.tasks.toLowerCase()) +
       " yet. Add one, then hit <b>Start</b> to track time against it.</div>";
   } else {
-    html += '<div style="overflow:auto"><table><thead><tr>' +
-      "<th>" + esc(lex.task) + "</th><th>Type</th><th>Status</th><th>Assigned to</th><th>Dates</th>" +
-      "<th class=\"right\">Time</th><th class=\"right\">Actions</th>" +
-      "</tr></thead><tbody>" +
-      p.tasks.map(function (t) { return taskRowHTML(p, t); }).join("") +
+    const c0 = activeContainer();
+    const tcols = [
+      { key: "title", label: lex.task, type: "text", get: function (t) { return t.title; } },
+      { key: "type", label: lex.typeLabel, type: "select", get: function (t) { return t.type; } },
+      { key: "status", label: "Status", type: "select", get: function (t) { return t.status; } },
+      { key: "who", label: "Assigned to", type: "select",
+        get: function (t) { return memberName(c0, t.assigneeId); } },
+      { label: "Dates" }, { label: "Time", right: true }, { label: "Actions", right: true }
+    ];
+    const tshown = applyFilters("tasks", tcols, p.tasks);
+    html += filterNoteHTML("tasks", tshown.length, p.tasks.length);
+    html += '<div style="overflow:auto"><table>' +
+      tableHeadHTML("tasks", tcols, p.tasks) + "<tbody>" +
+      (tshown.length
+        ? tshown.map(function (t) { return taskRowHTML(p, t); }).join("")
+        : '<tr><td colspan="7" class="nomatch">Nothing matches these filters.</td></tr>') +
       "</tbody></table></div>";
   }
   html += "</div>";
@@ -1882,6 +1920,124 @@ function rangeBounds(key) {
   }
 }
 
+
+
+/* =========================================================
+   Table filters
+   -----------------------------------------------------------
+   One engine for every data table. A column declares how it is
+   filtered and how to read its value out of a row; the engine
+   renders the filter row, decides what passes, and reports how
+   much is hidden so nothing ever vanishes silently.
+   ========================================================= */
+
+function allFilters() {
+  if (!state.ui.filters || typeof state.ui.filters !== "object") state.ui.filters = {};
+  return state.ui.filters;
+}
+function filterVal(tableKey, colKey) {
+  const t = allFilters()[tableKey];
+  return (t && t[colKey]) || "";
+}
+function setFilter(tableKey, colKey, v) {
+  const f = allFilters();
+  f[tableKey] = f[tableKey] || {};
+  if (v) f[tableKey][colKey] = v; else delete f[tableKey][colKey];
+  if (!Object.keys(f[tableKey]).length) delete f[tableKey];
+}
+function anyFilter(tableKey) {
+  return !!allFilters()[tableKey];
+}
+function clearFilters(tableKey) {
+  delete allFilters()[tableKey];
+}
+
+/** Distinct non-empty values a column actually has, so no option is a dead end. */
+function distinctVals(rows, get) {
+  const set = new Set();
+  rows.forEach(function (r) {
+    const v = get(r);
+    if (v !== undefined && v !== null && String(v).trim() !== "") set.add(String(v));
+  });
+  return Array.from(set).sort(function (a, b) { return a.localeCompare(b); });
+}
+
+function rowPasses(tableKey, cols, row) {
+  return cols.every(function (c) {
+    if (!c.key) return true;
+    const want = filterVal(tableKey, c.key);
+    if (!want) return true;
+    const cell = String(c.get(row) == null ? "" : c.get(row));
+    if (c.type === "select") return cell === want;
+    return cell.toLowerCase().indexOf(want.toLowerCase()) >= 0;
+  });
+}
+
+function applyFilters(tableKey, cols, rows) {
+  if (!anyFilter(tableKey)) return rows;
+  return rows.filter(function (r) { return rowPasses(tableKey, cols, r); });
+}
+
+/** The header row plus the filter row beneath it. */
+function tableHeadHTML(tableKey, cols, rows) {
+  let head = "<thead><tr>" + cols.map(function (c) {
+    return "<th" + (c.right ? ' class="right"' : "") + ">" + esc(c.label) + "</th>";
+  }).join("") + "</tr>";
+  head += '<tr class="filters">' + cols.map(function (c) {
+    if (!c.key) return "<td></td>";
+    const v = filterVal(tableKey, c.key);
+    const id = tableKey + "|" + c.key;
+    if (c.type === "select") {
+      const opts = c.options || distinctVals(rows, c.get);
+      return '<td><select data-filter="' + id + '"' + (v ? ' class="on"' : "") + '>' +
+        '<option value="">All</option>' +
+        opts.map(function (o) {
+          return '<option value="' + esc(o) + '"' + (o === v ? " selected" : "") + ">" + esc(o) + "</option>";
+        }).join("") + "</select></td>";
+    }
+    return '<td><input type="text" data-filter="' + id + '" value="' + esc(v) +
+      '" placeholder="filter"' + (v ? ' class="on"' : "") + "></td>";
+  }).join("") + "</tr></thead>";
+  return head;
+}
+
+/** Shown when a filter is hiding rows, so the list never looks like data loss. */
+function filterNoteHTML(tableKey, shown, total) {
+  if (!anyFilter(tableKey)) return "";
+  return '<div class="fnote">Showing <b>' + shown + "</b> of " + total +
+    ' · <button class="btn sm ghost" data-clearfilter="' + tableKey + '">Clear filters</button></div>';
+}
+
+function wireFilters(scope) {
+  (scope || document).querySelectorAll("[data-filter]").forEach(function (el) {
+    const parts = el.getAttribute("data-filter").split("|");
+    const handler = function () {
+      setFilter(parts[0], parts[1], el.value);
+      state.ui.focusFilter = el.tagName === "INPUT" ? el.getAttribute("data-filter") : null;
+      save();
+      render();
+    };
+    if (el.tagName === "SELECT") el.onchange = handler; else el.oninput = handler;
+  });
+  (scope || document).querySelectorAll("[data-clearfilter]").forEach(function (b) {
+    b.onclick = function () {
+      clearFilters(b.getAttribute("data-clearfilter"));
+      state.ui.focusFilter = null;
+      save();
+      render();
+    };
+  });
+}
+
+/** Put the caret back after a re-render, so typing in a filter is continuous. */
+function restoreFilterFocus() {
+  const key = state.ui.focusFilter;
+  if (!key) return;
+  const el = document.querySelector('input[data-filter="' + key + '"]');
+  if (!el) return;
+  el.focus();
+  try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* not a text input */ }
+}
 
 /* =========================================================
    Documents
@@ -3179,11 +3335,17 @@ function membersHTML() {
     '<div class="head"><h3 style="flex:1">' + esc(lex.members) + " of " + esc(c ? c.name : "") + "</h3>" +
       '<button class="btn sm primary" data-act="newMember">+ ' + esc(lex.member) + "</button></div>";
 
-  html += '<div style="overflow:auto"><table><thead><tr>' +
-    "<th>Name</th><th>" + esc(lex.memberCol) + "</th><th>E-mail</th><th class=\"right\">" +
-      esc(lex.roster ? "Characters" : lex.tasks) + "</th><th class=\"right\">Actions</th>" +
-    "</tr></thead><tbody>" +
-    members.map(function (m) {
+  const mcols = [
+    { key: "name", label: "Name", type: "text", get: function (m) { return m.name; } },
+    { key: "team", label: lex.memberCol, type: "select", get: function (m) { return m.team; } },
+    { key: "email", label: "E-mail", type: "text", get: function (m) { return m.email; } },
+    { label: lex.roster ? "Characters" : lex.tasks, right: true },
+    { label: "Actions", right: true }
+  ];
+  const mshown = applyFilters("members", mcols, members);
+  html += filterNoteHTML("members", mshown.length, members.length);
+  html += '<div style="overflow:auto"><table>' + tableHeadHTML("members", mcols, members) + "<tbody>" +
+    mshown.map(function (m) {
       const chars = charactersOf(c, m.id);
       const n = lex.roster ? chars.length : memberTaskCount(c, m.id);
       let row = "<tr" + (lex.roster ? ' class="clickable" data-open-player="' + m.id + '"' : "") + ">" +
@@ -3224,6 +3386,7 @@ function membersHTML() {
       }
       return row;
     }).join("") +
+    (mshown.length ? "" : '<tr><td colspan="5" class="nomatch">Nothing matches these filters.</td></tr>') +
     "</tbody></table></div>";
 
   html += '<div class="body"><span class="hint">' +
@@ -3392,14 +3555,30 @@ function dueSectionHTML() {
       '<span class="hint">Only open ' + esc(LX().tasks.toLowerCase()) + " with a " +
       esc(LX().dueLabel.toLowerCase()) + " appear here.</span></div>";
   } else {
-    html += '<div style="overflow:auto"><table><thead><tr>' +
-      "<th>Due</th><th>" + esc(LX().task) + "</th><th>" + esc(LX().project) +
-        "</th><th>Status</th><th>Assigned to</th><th class=\"right\">Logged</th>" +
-      "</tr></thead><tbody>" +
-      dueRowsHTML("Overdue", b.overdue, "due-over") +
-      dueRowsHTML("Today", b.today, "due-soon") +
-      dueRowsHTML("Rest of this week", b.week, "") +
-      dueRowsHTML("Next 14 days", b.later, "") +
+    const dc0 = activeContainer();
+    const dcols = [
+      { label: "Due" },
+      { key: "task", label: LX().task, type: "text", get: function (i) { return i.task.title; } },
+      { key: "proj", label: LX().project, type: "select", get: function (i) { return i.project.name; } },
+      { key: "status", label: "Status", type: "select", get: function (i) { return i.task.status; } },
+      { key: "who", label: "Assigned to", type: "select",
+        get: function (i) { return memberName(dc0, i.task.assigneeId); } },
+      { label: "Logged", right: true }
+    ];
+    const allDue = b.overdue.concat(b.today, b.week, b.later);
+    const fOverdue = applyFilters("due", dcols, b.overdue);
+    const fToday = applyFilters("due", dcols, b.today);
+    const fWeek = applyFilters("due", dcols, b.week);
+    const fLater = applyFilters("due", dcols, b.later);
+    const dueShown = fOverdue.length + fToday.length + fWeek.length + fLater.length;
+    html += filterNoteHTML("due", dueShown, allDue.length);
+    html += '<div style="overflow:auto"><table>' +
+      tableHeadHTML("due", dcols, allDue) + "<tbody>" +
+      dueRowsHTML("Overdue", fOverdue, "due-over") +
+      dueRowsHTML("Today", fToday, "due-soon") +
+      dueRowsHTML("Rest of this week", fWeek, "") +
+      dueRowsHTML("Next 14 days", fLater, "") +
+      (dueShown ? "" : '<tr><td colspan="6" class="nomatch">Nothing matches these filters.</td></tr>') +
       "</tbody></table></div>" +
       '<div class="body"><span class="hint">Click any task to jump to its project. ' +
       "Completed and cancelled tasks are left out.</span></div>";
@@ -3499,15 +3678,25 @@ function reportsHTML() {
   if (!taskRows.length) {
     html += '<div class="empty">No time logged in this period.</div>';
   } else {
-    html += '<div style="overflow:auto"><table><thead><tr><th>' + esc(LX(c).project) + "</th><th>" +
-      esc(LX(c).task) + '</th><th>Type</th><th>' + esc(LX(c).personLabel) + "</th>" +
-      "<th>" + esc(LX(c).deptLabel) + '</th><th class="right">Time</th><th class="right">Hours</th></tr></thead><tbody>' +
-      taskRows.map(function (r) {
+    const rcols = [
+      { key: "proj", label: LX(c).project, type: "select", get: function (r) { return r.project.name; } },
+      { key: "task", label: LX(c).task, type: "text", get: function (r) { return r.task.title; } },
+      { key: "type", label: LX(c).typeLabel, type: "select", get: function (r) { return r.task.type; } },
+      { key: "person", label: LX(c).personLabel, type: "text", get: function (r) { return r.project.person; } },
+      { key: "dept", label: LX(c).deptLabel, type: "select", get: function (r) { return r.project.department; } },
+      { label: "Time", right: true }, { label: "Hours", right: true }
+    ];
+    const rshown = applyFilters("detail", rcols, taskRows);
+    html += filterNoteHTML("detail", rshown.length, taskRows.length);
+    html += '<div style="overflow:auto"><table>' + tableHeadHTML("detail", rcols, taskRows) + "<tbody>" +
+      rshown.map(function (r) {
         return "<tr><td>" + esc(r.project.name) + "</td><td>" + esc(r.task.title) + "</td>" +
           '<td><span class="type-pill">' + esc(r.task.type) + "</span></td>" +
           "<td>" + esc(r.project.person || "—") + "</td><td>" + esc(r.project.department || "—") + "</td>" +
           '<td class="right mono nowrap">' + fmtDur(r.ms) + '</td><td class="right mono">' + fmtHours(r.ms) + "</td></tr>";
-      }).join("") + "</tbody></table></div>";
+      }).join("") +
+      (rshown.length ? "" : '<tr><td colspan="7" class="nomatch">Nothing matches these filters.</td></tr>') +
+      "</tbody></table></div>";
   }
   html += "</div></div>";
   return html;
@@ -3607,6 +3796,9 @@ function importJSON(file) {
    ========================================================= */
 function boot() {
   load();
+  // Never restore focus into a filter box on a fresh load - it would steal the
+  // caret and scroll the page to wherever that table happens to be.
+  state.ui.focusFilter = null;
 
   // Probe local storage so the header can tell the user, up front, whether
   // this machine will actually keep their data between sessions.
