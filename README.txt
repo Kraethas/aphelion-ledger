@@ -164,6 +164,9 @@ Chrome or Edge on the desktop. Firefox and Safari do not offer it, and Ledger
 will say so plainly instead of half-working. Everything else in Ledger runs
 fine in any browser.
 
+This works from the file itself - just double-click AphelionLedger.html as
+usual. You do not need to put it on a web server or do anything special.
+
 The folder permission is remembered between sessions, but browsers ask you to
 confirm it again after a restart - that is the browser protecting your disk,
 not a bug. If you move or rename the folder outside Ledger, choose it again.
