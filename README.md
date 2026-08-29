@@ -4,7 +4,7 @@
 
 If your work computer won't let you install software or sign into a cloud service, most time trackers are simply unavailable to you, and you end up in a spreadsheet. Aphelion Ledger is built for exactly that situation: download one file, double-click it, and start tracking.
 
-It also runs tabletop RPG campaigns. [Skip to that](#it-also-runs-campaigns) if that's why you're here.
+**It also runs tabletop RPG campaigns** — the same file, speaking a different language. There's a full section on that further down.
 
 [**Download the latest release →**](https://github.com/Kraethas/aphelion-ledger/releases/latest)
 
