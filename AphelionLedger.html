@@ -196,7 +196,7 @@ tr.running{background:var(--green-soft)}
 .block{
   position:absolute;border-radius:5px;padding:2px 5px;font-size:11.5px;line-height:1.25;
   overflow:hidden;cursor:grab;background:var(--accent-soft);color:var(--text);
-  border-left:3px solid var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.12);
+  border-left:3px solid var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.12);z-index:2;
 }
 .block .bt{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .block .bs{color:var(--muted);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -204,6 +204,7 @@ tr.running{background:var(--green-soft)}
 .block.ghost{
   border:1px dashed var(--border);border-left:3px solid var(--border);
   background:var(--panel-2);color:var(--muted);opacity:.72;pointer-events:none;box-shadow:none;
+  z-index:1;   /* behind your own blocks, and free to overlap them */
 }
 .block.dragging{opacity:.9;cursor:grabbing;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.28)}
 .block .rz{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize}
@@ -1614,20 +1615,28 @@ function plannerHTML() {
         html += '<div class="nowline" style="top:' + ((nm - planView.loMin) / 60 * PX_PER_HOUR) + 'px"></div>';
       }
     }
-    layoutBlocks(perDay[iso]).forEach(function (e) {
-      const b = e.block;
-      const top = (toMin(b.start) - planView.loMin) / 60 * PX_PER_HOUR;
-      const h = Math.max(15, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
-      const w = 100 / e.total;
-      const lab = blockLabel(e.ghost ? e.ownerC : c, b);
-      const sub = e.ghost ? e.owner : (lab.sub || "");
-      html += '<div class="block' + (b.kind === "event" ? " event" : "") + (e.ghost ? " ghost" : "") + '"' +
-        (e.ghost ? "" : ' data-block="' + b.id + '" data-day="' + iso + '"') +
-        ' style="top:' + top + "px;height:" + h + "px;left:calc(" + (e.col * w) + "% + 2px);width:calc(" + w + "% - 4px);\">" +
-        '<div class="bt">' + esc(lab.title) + "</div>" +
-        '<div class="bs">' + esc(b.start + "–" + b.end + (sub ? " · " + sub : "")) + "</div>" +
-        (e.ghost ? "" : '<div class="rz"></div>') +
-        "</div>";
+    // Two independent layers. Other containers' blocks sit behind and are
+    // allowed to overlap your own, so a busy Personal day never squeezes your
+    // Work blocks into a sliver - each layer only competes with itself.
+    const ownEntries = perDay[iso].filter(function (e) { return !e.ghost; });
+    const ghostEntries = perDay[iso].filter(function (e) { return e.ghost; });
+
+    [ghostEntries, ownEntries].forEach(function (layer) {
+      layoutBlocks(layer).forEach(function (e) {
+        const b = e.block;
+        const top = (toMin(b.start) - planView.loMin) / 60 * PX_PER_HOUR;
+        const h = Math.max(15, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
+        const w = 100 / e.total;
+        const lab = blockLabel(e.ghost ? e.ownerC : c, b);
+        const sub = e.ghost ? e.owner : (lab.sub || "");
+        html += '<div class="block' + (b.kind === "event" ? " event" : "") + (e.ghost ? " ghost" : "") + '"' +
+          (e.ghost ? "" : ' data-block="' + b.id + '" data-day="' + iso + '"') +
+          ' style="top:' + top + "px;height:" + h + "px;left:calc(" + (e.col * w) + "% + 2px);width:calc(" + w + "% - 4px);\">" +
+          '<div class="bt">' + esc(lab.title) + "</div>" +
+          '<div class="bs">' + esc(b.start + "–" + b.end + (sub ? " · " + sub : "")) + "</div>" +
+          (e.ghost ? "" : '<div class="rz"></div>') +
+          "</div>";
+      });
     });
     html += "</div>";
   });

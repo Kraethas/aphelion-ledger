@@ -103,7 +103,9 @@ shows planned against logged for the week, which is the point: you can see
 where your plan and your actual week parted company.
 
 Blocks belonging to your other containers appear greyed out and read-only, so
-you can see your whole day without mixing Work and Personal together.
+you can see your whole day without mixing Work and Personal together. They sit
+behind your own blocks and are free to overlap them, so a busy Personal day
+never squeezes your Work blocks into slivers.
 
 IMPORT .ICS reads a calendar file exported from Outlook or similar and turns
 its meetings into blocks, so you do not have to retype them. It reads the file
