@@ -226,6 +226,24 @@ tr.running{background:var(--green-soft)}
 .plansum{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px}
 .plansum b{font-variant-numeric:tabular-nums}
 
+/* ---------- plot arcs, cast, multi-select ---------- */
+.checklist{display:flex;flex-direction:column;gap:5px;max-height:190px;overflow:auto;
+  border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--panel-2)}
+.chk{display:flex;align-items:center;gap:8px;font-weight:400;color:var(--text);font-size:13.5px;cursor:pointer}
+.chk input{width:auto;margin:0}
+.arclbl{cursor:pointer;display:flex;align-items:center;gap:7px}
+.arclbl:hover{color:var(--accent)}
+.arccount{
+  font-size:10.5px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:99px;
+  background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;
+}
+.arcbox{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:2px 0 8px}
+.arcrow{display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px dashed var(--border);flex-wrap:wrap}
+.arcrow:last-child{border-bottom:none}
+.arcrow .an{flex:1;font-weight:600;font-size:13px;min-width:120px}
+tr.clickable{cursor:pointer}
+tr.clickable:hover{background:var(--panel-2)}
+
 /* ---------- printable record ---------- */
 #printRoot{display:none}
 .psheet{
@@ -408,8 +426,82 @@ const TASK_STATUS_CLASS = {
 
 /* Statuses that take a task off your plate - used for "open" counts and styling. */
 function isTaskClosed(t) {
-  return t.status === "Completed" || t.status === "Cancelled";
+  return CLOSED_STATUSES.indexOf(t.status) >= 0;
 }
+
+/* ---------- campaign mode ----------
+   The same machinery, a different vocabulary. A container declares its kind
+   and every label, status list and type list is drawn from the lexicon. */
+
+const CAMPAIGN_STATUSES = ["Planned", "Active", "On Hiatus", "Completed", "Abandoned"];
+const CAMPAIGN_STATUS_CLASS = {
+  "Planned": "s-ns", "Active": "s-dev", "On Hiatus": "t-pause",
+  "Completed": "s-done", "Abandoned": "t-cancel"
+};
+
+const SESSION_STATUSES = [
+  "Scheduled", "Confirmed", "Awaiting Players", "Prepped", "Played", "Postponed", "Cancelled"
+];
+const SESSION_STATUS_CLASS = {
+  "Scheduled": "t-ns", "Confirmed": "t-prog", "Awaiting Players": "t-wait",
+  "Prepped": "t-rev", "Played": "t-done", "Postponed": "t-pause", "Cancelled": "t-cancel"
+};
+
+const SESSION_TYPES = [
+  "Live Session",
+  "GM Prep",
+  "Session Zero / Character Creation",
+  "Worldbuilding",
+  "Rules Reading",
+  "Recap & Notes",
+  "Maps & Assets",
+  "Downtime / Play-by-post",
+  "Scheduling & Admin",
+  "Other"
+];
+
+const CHAR_STATES = ["Active", "Retired", "Deceased"];
+const CHAR_STATE_CLASS = { "Active": "t-done", "Retired": "t-pause", "Deceased": "t-cancel" };
+
+/* Statuses that take an item off the board, across both vocabularies. */
+const CLOSED_STATUSES = ["Completed", "Cancelled", "Played"];
+
+const LEX = {
+  work: {
+    kindName: "Work", other: "campaign",
+    project: "Project", projects: "Projects", newProject: "New project",
+    task: "Task", tasks: "Tasks",
+    member: "Member", members: "Members", memberCol: "Team",
+    personLabel: "Person / requester", personPh: "e.g. Jane Doe",
+    deptLabel: "Department", deptPh: "e.g. Finance",
+    milestone: "Milestone", milestones: "Milestones",
+    dueLabel: "Due date", startedLabel: "Date started",
+    typeLabel: "Type of work",
+    statuses: STATUSES, statusClass: STATUS_CLASS,
+    taskStatuses: TASK_STATUSES, taskStatusClass: TASK_STATUS_CLASS,
+    taskTypes: TASK_TYPES, defaultType: "Development Work",
+    roster: false
+  },
+  campaign: {
+    kindName: "Campaign", other: "work",
+    project: "Campaign", projects: "Campaigns", newProject: "New campaign",
+    task: "Session", tasks: "Sessions",
+    member: "Player", members: "Players", memberCol: "Group",
+    personLabel: "Game Master", personPh: "e.g. Alex",
+    deptLabel: "System", deptPh: "e.g. D&D 5e",
+    milestone: "Plot arc", milestones: "Plot arcs",
+    dueLabel: "Session date", startedLabel: "Prep started",
+    typeLabel: "Activity",
+    statuses: CAMPAIGN_STATUSES, statusClass: CAMPAIGN_STATUS_CLASS,
+    taskStatuses: SESSION_STATUSES, taskStatusClass: SESSION_STATUS_CLASS,
+    taskTypes: SESSION_TYPES, defaultType: "Live Session",
+    roster: true
+  }
+};
+
+function kindOf(c) { return (c && c.kind === "campaign") ? "campaign" : "work"; }
+/** Lexicon for a container, defaulting to the active one. */
+function LX(c) { return LEX[kindOf(c === undefined ? activeContainer() : c)]; }
 
 const SELF = "Myself";
 const NEW_MEMBER = "__new__";
@@ -440,6 +532,17 @@ function memberOptions(c) {
   opts.push({ value: NEW_MEMBER, label: "+ Add someone new…" });
   return opts;
 }
+/** Every character a member has played, across the container's campaigns. */
+function charactersOf(c, memberId) {
+  const out = [];
+  (c && c.projects || []).forEach(function (p) {
+    (p.roster || []).forEach(function (r) {
+      if (r.memberId === memberId) out.push({ project: p, entry: r });
+    });
+  });
+  return out;
+}
+
 /** How many tasks in this container point at a given member. */
 function memberTaskCount(c, id) {
   let n = 0;
@@ -513,6 +616,8 @@ function normalise() {
   state.containers.forEach(function (c) {
     c.id = c.id || uid();
     c.name = c.name || "Untitled";
+    c.kind = c.kind === "campaign" ? "campaign" : "work";
+    const lex = LEX[c.kind];
     c.projects = Array.isArray(c.projects) ? c.projects : [];
 
     // Every container has a member list, and it always starts with you.
@@ -553,8 +658,24 @@ function normalise() {
       p.description = p.description || "";
       p.person = p.person || "";
       p.department = p.department || "";
-      p.status = STATUSES.indexOf(p.status) >= 0 ? p.status : STATUSES[0];
+      // Statuses come from the container's vocabulary; if a container changes
+      // kind, map by position so "second status" stays "second status".
+      if (lex.statuses.indexOf(p.status) < 0) {
+        const idx = LEX[lex.other].statuses.indexOf(p.status);
+        p.status = lex.statuses[idx >= 0 && idx < lex.statuses.length ? idx : 0];
+      }
       p.milestones = Array.isArray(p.milestones) ? p.milestones : [];
+      // Characters belong to a campaign, not to a player: one person can play
+      // several characters here, and the same person elsewhere is someone else.
+      p.roster = Array.isArray(p.roster) ? p.roster : [];
+      p.roster = p.roster.filter(function (r) { return !!findMember(c, r.memberId); });
+      p.roster.forEach(function (r) {
+        r.id = r.id || uid();
+        r.name = (r.name || "").trim() || "Unnamed";
+        r.archetype = r.archetype || "";
+        r.state = CHAR_STATES.indexOf(r.state) >= 0 ? r.state : "Active";
+        r.note = r.note || "";
+      });
       p.tasks = Array.isArray(p.tasks) ? p.tasks : [];
       p.milestones.forEach(function (m) {
         m.id = m.id || uid();
@@ -565,12 +686,20 @@ function normalise() {
       p.tasks.forEach(function (t) {
         t.id = t.id || uid();
         t.title = t.title || "Untitled task";
-        t.type = TASK_TYPES.indexOf(t.type) >= 0 ? t.type : "Other";
+        // Types map by position too, so switching a container's kind and back
+        // returns the original value rather than collapsing everything to Other.
+        if (lex.taskTypes.indexOf(t.type) < 0) {
+          const ti = LEX[lex.other].taskTypes.indexOf(t.type);
+          t.type = (ti >= 0 && ti < lex.taskTypes.length) ? lex.taskTypes[ti] : "Other";
+        }
         t.notes = t.notes || "";
         // v1.0 tasks carried a done flag; it becomes a status.
-        t.status = TASK_STATUSES.indexOf(t.status) >= 0
-          ? t.status
-          : (t.done ? "Completed" : "Not Started");
+        if (lex.taskStatuses.indexOf(t.status) < 0) {
+          const prev = LEX[lex.other].taskStatuses.indexOf(t.status);
+          t.status = prev >= 0 && prev < lex.taskStatuses.length
+            ? lex.taskStatuses[prev]
+            : (t.done ? lex.taskStatuses[lex.taskStatuses.length - 3] : lex.taskStatuses[0]);
+        }
         delete t.done;
         // Free-text assignees become real member records, matched by name.
         if (!t.assigneeId || !findMember(c, t.assigneeId)) {
@@ -593,6 +722,11 @@ function normalise() {
         delete t.assignee;
         t.started = t.started || "";
         t.due = t.due || "";
+        // Sessions can belong to several plot arcs at once.
+        t.arcIds = Array.isArray(t.arcIds) ? t.arcIds : [];
+        t.arcIds = t.arcIds.filter(function (id) {
+          return p.milestones.some(function (m) { return m.id === id; });
+        });
         t.entries = Array.isArray(t.entries) ? t.entries : [];
         t.entries.forEach(function (e) {
           e.id = e.id || uid();
@@ -794,6 +928,17 @@ function openModal(opts) {
         html += '<option value="' + esc(val) + '"' + (val === f.value ? " selected" : "") + ">" + esc(lab) + "</option>";
       });
       html += "</select>";
+    } else if (f.type === "checks") {
+      html += '<div class="checklist" id="' + id + '">';
+      if (!(f.options || []).length) {
+        html += '<span class="hint">' + esc(f.empty || "Nothing to choose from yet.") + "</span>";
+      }
+      (f.options || []).forEach(function (o) {
+        const on = (f.value || []).indexOf(o.value) >= 0;
+        html += '<label class="chk"><input type="checkbox" value="' + esc(o.value) + '"' +
+          (on ? " checked" : "") + "> <span>" + esc(o.label) + "</span></label>";
+      });
+      html += "</div>";
     } else if (f.type === "combo") {
       // Free text, with previously used values offered as suggestions.
       html += '<input type="text" id="' + id + '" list="' + id + '_list" value="' + esc(f.value || "") +
@@ -830,7 +975,13 @@ function openModal(opts) {
     const values = {};
     fields.forEach(function (f, i) {
       const el = document.getElementById("mf_" + i);
-      values[f.key] = el ? el.value : "";
+      if (f.type === "checks") {
+        values[f.key] = el
+          ? Array.from(el.querySelectorAll("input:checked")).map(function (x) { return x.value; })
+          : [];
+      } else {
+        values[f.key] = el ? el.value : "";
+      }
     });
     if (opts.validate) {
       const err = opts.validate(values);
@@ -855,8 +1006,12 @@ function openModal(opts) {
 function render() {
   renderContainerTabs();
   renderRunBar();
+  const lx = LX();
   document.querySelectorAll("header .tab[data-view]").forEach(function (b) {
-    b.classList.toggle("active", b.getAttribute("data-view") === state.ui.view);
+    const v = b.getAttribute("data-view");
+    b.classList.toggle("active", v === state.ui.view);
+    if (v === "projects") b.textContent = lx.projects;
+    if (v === "members") b.textContent = lx.members;
   });
   const view = document.getElementById("view");
   if (state.ui.view === "reports") {
@@ -897,12 +1052,29 @@ function containerMenu(id) {
   if (!c) return;
   openModal({
     title: "Container settings",
-    intro: "Rename this container, or remove it entirely.",
-    fields: [{ key: "name", label: "Container name", value: c.name }],
-    okLabel: "Rename",
+    intro: "Rename this container, change what it is for, or remove it entirely.",
+    fields: [
+      { key: "name", label: "Container name", value: c.name },
+      { key: "kind", label: "What is it for?", type: "select",
+        options: [
+          { value: "work", label: "Work — projects, tasks, departments" },
+          { value: "campaign", label: "Roleplay — campaigns, sessions, players" }
+        ], value: kindOf(c) }
+    ],
+    okLabel: "Save",
     validate: function (v) { return v.name.trim() ? null : "Name cannot be empty."; },
     onSubmit: function (v) {
       c.name = v.name.trim();
+      if (v.kind !== kindOf(c)) {
+        const n = c.projects.length;
+        if (n && !confirm("Switching this container to " + LEX[v.kind].kindName.toLowerCase() +
+          " will re-map the statuses and activity types on its " + n +
+          " item(s) to the new vocabulary. Your names, notes and logged time are untouched. Continue?")) {
+          return;
+        }
+        c.kind = v.kind;
+        normalise();
+      }
       save();
       render();
     }
@@ -952,17 +1124,18 @@ function projectsHTML() {
 
   let list = "";
   if (!projects.length) {
-    list = '<div class="empty">No projects in <b>' + esc(c ? c.name : "") + "</b> yet.<br><br>" +
-      '<button class="btn primary" data-act="newProject">+ New project</button></div>';
+    list = '<div class="empty">No ' + LX(c).projects.toLowerCase() + ' in <b>' + esc(c ? c.name : "") + "</b> yet.<br><br>" +
+      '<button class="btn primary" data-act="newProject">+ ' + esc(LX(c).newProject) + "</button></div>";
   } else {
     list = '<div class="plist">' + projects.map(function (pr) {
       return '<div class="pitem' + (p && pr.id === p.id ? " active" : "") + '" data-open="' + pr.id + '">' +
         '<div style="flex:1">' +
           '<div class="nm">' + esc(pr.name) + "</div>" +
           '<div class="meta">' +
-            '<span class="badge ' + STATUS_CLASS[pr.status] + '">' + esc(pr.status) + "</span>" +
+            '<span class="badge ' + LX(c).statusClass[pr.status] + '">' + esc(pr.status) + "</span>" +
             '<span class="small muted mono" data-live-project="' + pr.id + '">' + fmtDur(projectTotalMs(pr)) + "</span>" +
-            '<span class="small muted">' + pr.tasks.length + " task" + (pr.tasks.length === 1 ? "" : "s") + "</span>" +
+            '<span class="small muted">' + pr.tasks.length + " " + LX(c).task.toLowerCase() +
+              (pr.tasks.length === 1 ? "" : "s") + "</span>" +
           "</div>" +
         "</div></div>";
     }).join("") + "</div>";
@@ -970,7 +1143,7 @@ function projectsHTML() {
 
   const sidebar =
     '<div class="card">' +
-      '<div class="head"><h3 style="flex:1">Projects</h3>' +
+      '<div class="head"><h3 style="flex:1">' + esc(LX(c).projects) + "</h3>" +
         '<button class="btn sm primary" data-act="newProject">+ New</button></div>' +
       list +
     "</div>";
@@ -986,6 +1159,7 @@ function emptyDetailHTML() {
 }
 
 function projectDetailHTML(p) {
+  const lex = LX();
   const total = projectTotalMs(p);
   const openTasks = p.tasks.filter(function (t) { return !isTaskClosed(t); }).length;
 
@@ -994,7 +1168,7 @@ function projectDetailHTML(p) {
     '<div class="card" style="margin-bottom:16px">' +
       '<div class="head">' +
         '<h2 style="flex:1">' + esc(p.name) + "</h2>" +
-        '<span class="badge ' + STATUS_CLASS[p.status] + '">' + esc(p.status) + "</span>" +
+        '<span class="badge ' + lex.statusClass[p.status] + '">' + esc(p.status) + "</span>" +
         '<button class="btn sm ghost" data-act="renameProject">Rename</button>' +
         '<button class="btn sm ghost danger" data-act="deleteProject">Delete</button>' +
       "</div>" +
@@ -1002,15 +1176,18 @@ function projectDetailHTML(p) {
         '<div class="kpis" style="margin-bottom:14px">' +
           '<div class="kpi"><div class="v mono" data-live-project="' + p.id + '">' + fmtDur(total) + "</div><div class=\"k\">Total tracked</div></div>" +
           '<div class="kpi"><div class="v mono">' + fmtHours(total) + '</div><div class="k">Hours (decimal)</div></div>' +
-          '<div class="kpi"><div class="v mono">' + p.tasks.length + '</div><div class="k">Tasks (' + openTasks + " open)</div></div>" +
+          '<div class="kpi"><div class="v mono">' + p.tasks.length + '</div><div class="k">' +
+            esc(lex.tasks) + " (" + openTasks + " open)</div></div>" +
           '<div class="kpi"><div class="v mono">' + p.milestones.filter(function (m) { return !m.done; }).length +
-            '</div><div class="k">Open milestones</div></div>' +
+            '</div><div class="k">Open ' + esc(lex.milestones.toLowerCase()) + "</div></div>" +
         "</div>" +
         '<div class="fields">' +
-          '<label class="f">Person / requester<input type="text" data-field="person" value="' + esc(p.person) + '" placeholder="e.g. Jane Doe"></label>' +
-          '<label class="f">Department<input type="text" data-field="department" value="' + esc(p.department) + '" placeholder="e.g. Finance"></label>' +
+          '<label class="f">' + esc(lex.personLabel) + '<input type="text" data-field="person" value="' +
+            esc(p.person) + '" placeholder="' + esc(lex.personPh) + '"></label>' +
+          '<label class="f">' + esc(lex.deptLabel) + '<input type="text" data-field="department" value="' +
+            esc(p.department) + '" placeholder="' + esc(lex.deptPh) + '"></label>' +
           '<label class="f">Status<select data-field="status">' +
-            STATUSES.map(function (s) {
+            lex.statuses.map(function (s) {
               return '<option value="' + esc(s) + '"' + (s === p.status ? " selected" : "") + ">" + esc(s) + "</option>";
             }).join("") +
           "</select></label>" +
@@ -1024,26 +1201,54 @@ function projectDetailHTML(p) {
   /* --- milestones --- */
   html +=
     '<div class="card" style="margin-bottom:16px">' +
-      '<div class="head"><h3 style="flex:1">Milestones</h3>' +
-        '<button class="btn sm" data-act="newMilestone">+ Milestone</button></div>' +
+      '<div class="head"><h3 style="flex:1">' + esc(lex.milestones) + "</h3>" +
+        '<button class="btn sm" data-act="newMilestone">+ ' + esc(lex.milestone) + "</button></div>" +
       '<div class="body">' +
         (p.milestones.length
-          ? p.milestones.slice().sort(milestoneSort).map(milestoneHTML).join("")
-          : '<div class="hint">No milestones yet.</div>') +
+          ? p.milestones.slice().sort(milestoneSort).map(function (m) { return milestoneHTML(m, p); }).join("")
+          : '<div class="hint">No ' + esc(lex.milestones.toLowerCase()) + " yet.</div>") +
       "</div>" +
     "</div>";
+
+  /* --- cast (campaigns only) --- */
+  if (lex.roster) {
+    html += '<div class="card" style="margin-bottom:16px">' +
+      '<div class="head"><h3 style="flex:1">Cast</h3>' +
+        '<button class="btn sm" data-act="newChar">+ Character</button></div>' +
+      '<div class="body">';
+    if (!p.roster.length) {
+      html += '<div class="hint">No characters yet. Add one to record who is playing whom.</div>';
+    } else {
+      html += '<div style="overflow:auto"><table><thead><tr><th>Character</th><th>Archetype</th>' +
+        "<th>Player</th><th>State</th><th class=\"right\">Actions</th></tr></thead><tbody>" +
+        p.roster.map(function (r) {
+          return "<tr>" +
+            '<td><div class="ttitle' + (r.state === "Deceased" ? " closed" : "") + '">' + esc(r.name) + "</div>" +
+              (r.note ? '<div class="small muted">' + esc(r.note) + "</div>" : "") + "</td>" +
+            "<td>" + (r.archetype ? esc(r.archetype) : '<span class="muted">&mdash;</span>') + "</td>" +
+            "<td>" + esc(memberName(activeContainer(), r.memberId)) + "</td>" +
+            '<td><span class="badge ' + CHAR_STATE_CLASS[r.state] + '">' + esc(r.state) + "</span></td>" +
+            '<td><div class="rowacts">' +
+              '<button class="btn sm ghost" data-edit-char="' + r.id + '">Edit</button>' +
+              '<button class="btn sm ghost danger" data-del-char="' + r.id + '">&times;</button>' +
+            "</div></td></tr>";
+        }).join("") + "</tbody></table></div>";
+    }
+    html += "</div></div>";
+  }
 
   /* --- tasks --- */
   html +=
     '<div class="card">' +
-      '<div class="head"><h3 style="flex:1">Tasks</h3>' +
-        '<button class="btn sm primary" data-act="newTask">+ Task</button></div>';
+      '<div class="head"><h3 style="flex:1">' + esc(lex.tasks) + "</h3>" +
+        '<button class="btn sm primary" data-act="newTask">+ ' + esc(lex.task) + "</button></div>";
 
   if (!p.tasks.length) {
-    html += '<div class="empty">No tasks yet. Add one, then hit <b>Start</b> to track time against it.</div>';
+    html += '<div class="empty">No ' + esc(lex.tasks.toLowerCase()) +
+      " yet. Add one, then hit <b>Start</b> to track time against it.</div>";
   } else {
     html += '<div style="overflow:auto"><table><thead><tr>' +
-      "<th>Task</th><th>Type</th><th>Status</th><th>Assigned to</th><th>Dates</th>" +
+      "<th>" + esc(lex.task) + "</th><th>Type</th><th>Status</th><th>Assigned to</th><th>Dates</th>" +
       "<th class=\"right\">Time</th><th class=\"right\">Actions</th>" +
       "</tr></thead><tbody>" +
       p.tasks.map(function (t) { return taskRowHTML(p, t); }).join("") +
@@ -1060,7 +1265,7 @@ function milestoneSort(a, b) {
   return a.due < b.due ? -1 : a.due > b.due ? 1 : 0;
 }
 
-function milestoneHTML(m) {
+function milestoneHTML(m, p) {
   let dueCls = "";
   let dueTxt = m.due ? new Date(m.due + "T00:00:00").toLocaleDateString() : "no due date";
   if (m.due && !m.done) {
@@ -1068,13 +1273,46 @@ function milestoneHTML(m) {
     if (days < 0) { dueCls = "due-over"; dueTxt += " (overdue)"; }
     else if (days <= 7) { dueCls = "due-soon"; dueTxt += days === 0 ? " (today)" : " (in " + days + "d)"; }
   }
-  return '<div class="ms' + (m.done ? " done" : "") + '">' +
+  const lex = LX();
+  const linked = (p && p.tasks || []).filter(function (t) {
+    return (t.arcIds || []).indexOf(m.id) >= 0;
+  });
+  const open = state.ui.openArc === m.id;
+  let html = '<div class="ms' + (m.done ? " done" : "") + '">' +
     '<input type="checkbox" data-ms-toggle="' + m.id + '"' + (m.done ? " checked" : "") + ">" +
-    '<div class="lbl">' + esc(m.label) + "</div>" +
+    '<div class="lbl arclbl" data-arc="' + m.id + '" title="Show linked ' +
+      esc(lex.tasks.toLowerCase()) + '">' + esc(m.label) +
+      '<span class="arccount">' + linked.length + "</span></div>" +
     '<div class="small ' + dueCls + '">' + esc(dueTxt) + "</div>" +
     '<button class="btn sm ghost" data-ms-edit="' + m.id + '">Edit</button>' +
     '<button class="btn sm ghost danger" data-ms-del="' + m.id + '">&times;</button>' +
     "</div>";
+  if (open) {
+    let ms = 0;
+    linked.forEach(function (t) { ms += taskTotalMs(t); });
+    html += '<div class="arcbox">';
+    if (!linked.length) {
+      html += '<span class="hint">No ' + esc(lex.tasks.toLowerCase()) + " linked to this " +
+        esc(lex.milestone.toLowerCase()) + " yet. Link them when you add or edit one.</span>";
+    } else {
+      html += '<div class="small muted" style="margin-bottom:6px"><b>' + linked.length + " " +
+        esc(linked.length === 1 ? lex.task.toLowerCase() : lex.tasks.toLowerCase()) +
+        "</b> · " + fmtDur(ms) + " logged</div>";
+      html += linked.slice().sort(function (a, b) {
+        return (a.due || "9999").localeCompare(b.due || "9999");
+      }).map(function (t) {
+        return '<div class="arcrow">' +
+          '<span class="badge ' + lex.taskStatusClass[t.status] + '">' + esc(t.status) + "</span>" +
+          '<span class="an">' + esc(t.title) + "</span>" +
+          '<span class="small muted">' + esc(t.due
+            ? new Date(t.due + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+            : "no date") + "</span>" +
+          '<span class="small mono">' + fmtDur(taskTotalMs(t)) + "</span></div>";
+      }).join("");
+    }
+    html += "</div>";
+  }
+  return html;
 }
 
 /** Short "12 Aug" style date, with overdue/soon flagging for live tasks. */
@@ -1108,14 +1346,15 @@ function taskRowHTML(p, t) {
         '<div class="small muted">' + entries.length + " session" + (entries.length === 1 ? "" : "s") +
           (entries.length ? ' · <a href="#" data-entries="' + t.id + '">details</a>' : "") + "</div></td>" +
       '<td><span class="type-pill">' + esc(t.type) + "</span></td>" +
-      '<td><span class="badge ' + TASK_STATUS_CLASS[t.status] + '">' + esc(t.status) + "</span></td>" +
+      '<td><span class="badge ' + LX(c).taskStatusClass[t.status] + '">' + esc(t.status) + "</span></td>" +
       '<td><span class="who">' + (mine
         ? '<span class="me">' + esc(member.name) + "</span>"
         : '<span class="other">' + esc(member ? member.name : "Unassigned") + "</span>") + "</span>" +
         (member && member.team && !mine ? '<div class="small muted">' + esc(member.team) + "</div>" : "") + "</td>" +
       '<td><div class="dates">' +
-        "<div><span>Started</span> <b>" + esc(startedTxt) + "</b></div>" +
-        '<div><span>Due</span> <b class="' + due.cls + '">' + esc(due.text) + "</b></div>" +
+        "<div><span>" + esc(LX(c).startedLabel.replace(/ ?date/i, "")) + "</span> <b>" + esc(startedTxt) + "</b></div>" +
+        '<div><span>' + (kindOf(c) === "campaign" ? "Session" : "Due") + '</span> <b class="' + due.cls + '">' +
+          esc(due.text) + "</b></div>" +
       "</div></td>" +
       '<td class="right mono nowrap" data-live-task="' + t.id + '">' + fmtClock(taskTotalMs(t)) + "</td>" +
       '<td><div class="rowacts">' +
@@ -1162,21 +1401,23 @@ function wireProjects() {
 
   view.querySelectorAll('[data-act="newProject"]').forEach(function (b) {
     b.onclick = function () {
+      const lex = LX(c);
       openModal({
-        title: "New project in " + c.name,
+        title: lex.newProject + " in " + c.name,
         fields: [
-          { key: "name", label: "Project name", value: "", placeholder: "e.g. Q3 Budget Automation" },
-          { key: "person", label: "Person / requester", value: "" },
-          { key: "department", label: "Department", value: "" },
-          { key: "status", label: "Status", type: "select", options: STATUSES, value: STATUSES[0] },
+          { key: "name", label: lex.project + " name", value: "",
+            placeholder: kindOf(c) === "campaign" ? "e.g. Curse of Strahd" : "e.g. Q3 Budget Automation" },
+          { key: "person", label: lex.personLabel, value: "", placeholder: lex.personPh },
+          { key: "department", label: lex.deptLabel, value: "", placeholder: lex.deptPh },
+          { key: "status", label: "Status", type: "select", options: lex.statuses, value: lex.statuses[0] },
           { key: "description", label: "Description", type: "textarea", value: "" }
         ],
-        okLabel: "Create project",
-        validate: function (v) { return v.name.trim() ? null : "Project name is required."; },
+        okLabel: "Create " + lex.project.toLowerCase(),
+        validate: function (v) { return v.name.trim() ? null : lex.project + " name is required."; },
         onSubmit: function (v) {
           const pr = {
             id: uid(), name: v.name.trim(), person: v.person.trim(), department: v.department.trim(),
-            status: v.status, description: v.description, milestones: [], tasks: []
+            status: v.status, description: v.description, milestones: [], tasks: [], roster: []
           };
           c.projects.push(pr);
           state.ui.projectId = pr.id;
@@ -1201,8 +1442,8 @@ function wireProjects() {
   const rename = view.querySelector('[data-act="renameProject"]');
   if (rename) rename.onclick = function () {
     openModal({
-      title: "Rename project",
-      fields: [{ key: "name", label: "Project name", value: p.name }],
+      title: "Rename " + LX(c).project.toLowerCase(),
+      fields: [{ key: "name", label: LX(c).project + " name", value: p.name }],
       validate: function (v) { return v.name.trim() ? null : "Name cannot be empty."; },
       onSubmit: function (v) { p.name = v.name.trim(); save(); render(); }
     });
@@ -1210,7 +1451,8 @@ function wireProjects() {
 
   const delp = view.querySelector('[data-act="deleteProject"]');
   if (delp) delp.onclick = function () {
-    if (!confirm('Delete project "' + p.name + '" with all its tasks and logged time?')) return;
+    if (!confirm("Delete " + LX(c).project.toLowerCase() + ' "' + p.name + '" with all its ' +
+      LX(c).tasks.toLowerCase() + " and logged time?")) return;
     if (state.running && state.running.projectId === p.id) state.running = null;
     c.projects = c.projects.filter(function (x) { return x.id !== p.id; });
     state.ui.projectId = null;
@@ -1222,12 +1464,13 @@ function wireProjects() {
   const newMs = view.querySelector('[data-act="newMilestone"]');
   if (newMs) newMs.onclick = function () {
     openModal({
-      title: "New milestone",
+      title: "New " + LX(c).milestone.toLowerCase(),
       fields: [
-        { key: "label", label: "Milestone", value: "", placeholder: "e.g. Draft sent for review" },
-        { key: "due", label: "Due date", type: "date", value: "" }
+        { key: "label", label: LX(c).milestone, value: "",
+          placeholder: kindOf(c) === "campaign" ? "e.g. The Death House" : "e.g. Draft sent for review" },
+        { key: "due", label: kindOf(c) === "campaign" ? "Target date" : "Due date", type: "date", value: "" }
       ],
-      validate: function (v) { return v.label.trim() ? null : "Milestone label is required."; },
+      validate: function (v) { return v.label.trim() ? null : LX(c).milestone + " label is required."; },
       onSubmit: function (v) {
         p.milestones.push({ id: uid(), label: v.label.trim(), due: v.due, done: false });
         save();
@@ -1235,6 +1478,13 @@ function wireProjects() {
       }
     });
   };
+  view.querySelectorAll("[data-arc]").forEach(function (el) {
+    el.onclick = function () {
+      const id = el.getAttribute("data-arc");
+      state.ui.openArc = state.ui.openArc === id ? null : id;
+      render();
+    };
+  });
   view.querySelectorAll("[data-ms-toggle]").forEach(function (el) {
     el.onchange = function () {
       const m = p.milestones.find(function (x) { return x.id === el.getAttribute("data-ms-toggle"); });
@@ -1246,12 +1496,12 @@ function wireProjects() {
       const m = p.milestones.find(function (x) { return x.id === el.getAttribute("data-ms-edit"); });
       if (!m) return;
       openModal({
-        title: "Edit milestone",
+        title: "Edit " + LX(c).milestone.toLowerCase(),
         fields: [
-          { key: "label", label: "Milestone", value: m.label },
-          { key: "due", label: "Due date", type: "date", value: m.due }
+          { key: "label", label: LX(c).milestone, value: m.label },
+          { key: "due", label: kindOf(c) === "campaign" ? "Target date" : "Due date", type: "date", value: m.due }
         ],
-        validate: function (v) { return v.label.trim() ? null : "Milestone label is required."; },
+        validate: function (v) { return v.label.trim() ? null : LX(c).milestone + " label is required."; },
         onSubmit: function (v) { m.label = v.label.trim(); m.due = v.due; save(); render(); }
       });
     };
@@ -1260,8 +1510,63 @@ function wireProjects() {
     el.onclick = function () {
       const id = el.getAttribute("data-ms-del");
       const m = p.milestones.find(function (x) { return x.id === id; });
-      if (!m || !confirm('Delete milestone "' + m.label + '"?')) return;
+      if (!m || !confirm("Delete " + LX(c).milestone.toLowerCase() + ' "' + m.label + '"?')) return;
       p.milestones = p.milestones.filter(function (x) { return x.id !== id; });
+      save();
+      render();
+    };
+  });
+
+  /* cast */
+  function charModal(existing) {
+    openModal({
+      title: existing ? "Edit character" : "New character",
+      intro: existing ? null : "Who is playing, and as whom.",
+      fields: [
+        { key: "name", label: "Character name", value: existing ? existing.name : "", placeholder: "e.g. Ireena Kolyana" },
+        { key: "archetype", label: "Archetype (class, profession or a short description)",
+          value: existing ? existing.archetype : "", placeholder: "e.g. Paladin, or ex-smuggler" },
+        { key: "memberId", label: "Played by", type: "select", options: memberOptions(c),
+          value: existing ? existing.memberId : selfMember(c).id },
+        { key: "state", label: "State", type: "select", options: CHAR_STATES,
+          value: existing ? existing.state : "Active" },
+        { key: "note", label: "Note (optional)", type: "textarea", value: existing ? existing.note : "" }
+      ],
+      okLabel: existing ? "Save" : "Add character",
+      validate: function (v) { return v.name.trim() ? null : "Character name is required."; },
+      onSubmit: function (v) {
+        function finish(memberId) {
+          if (existing) {
+            existing.name = v.name.trim(); existing.archetype = v.archetype.trim();
+            existing.memberId = memberId; existing.state = v.state; existing.note = v.note.trim();
+          } else {
+            p.roster.push({
+              id: uid(), memberId: memberId, name: v.name.trim(),
+              archetype: v.archetype.trim(), state: v.state, note: v.note.trim()
+            });
+          }
+          save();
+          render();
+        }
+        if (v.memberId === NEW_MEMBER) openMemberModal(c, null, function (m) { finish(m.id); });
+        else finish(v.memberId);
+      }
+    });
+  }
+
+  const newChar = view.querySelector('[data-act="newChar"]');
+  if (newChar) newChar.onclick = function () { charModal(null); };
+  view.querySelectorAll("[data-edit-char]").forEach(function (b) {
+    b.onclick = function () {
+      const r = p.roster.find(function (x) { return x.id === b.getAttribute("data-edit-char"); });
+      if (r) charModal(r);
+    };
+  });
+  view.querySelectorAll("[data-del-char]").forEach(function (b) {
+    b.onclick = function () {
+      const r = p.roster.find(function (x) { return x.id === b.getAttribute("data-del-char"); });
+      if (!r || !confirm('Remove character "' + r.name + '" from this campaign?')) return;
+      p.roster = p.roster.filter(function (x) { return x.id !== r.id; });
       save();
       render();
     };
@@ -1271,15 +1576,19 @@ function wireProjects() {
   const newTask = view.querySelector('[data-act="newTask"]');
   if (newTask) newTask.onclick = function () {
     openModal({
-      title: "New task in " + p.name,
+      title: "New " + LX(c).task.toLowerCase() + " in " + p.name,
       fields: [
-        { key: "title", label: "Task", value: "", placeholder: "e.g. Kick-off call with Finance" },
-        { key: "type", label: "Type of work", type: "select", options: TASK_TYPES, value: TASK_TYPES[1] },
-        { key: "status", label: "Status", type: "select", options: TASK_STATUSES, value: TASK_STATUSES[0] },
+        { key: "title", label: LX(c).task, value: "",
+          placeholder: kindOf(c) === "campaign" ? "e.g. Session 12 - Into the catacombs" : "e.g. Kick-off call with Finance" },
+        { key: "type", label: LX(c).typeLabel, type: "select", options: LX(c).taskTypes, value: LX(c).defaultType },
+        { key: "status", label: "Status", type: "select", options: LX(c).taskStatuses, value: LX(c).taskStatuses[0] },
         { key: "assigneeId", label: "Assigned to", type: "select", options: memberOptions(c),
           value: selfMember(c).id },
-        { key: "started", label: "Date started", type: "date", value: "" },
-        { key: "due", label: "Due date", type: "date", value: "" },
+        { key: "started", label: LX(c).startedLabel, type: "date", value: "" },
+        { key: "due", label: LX(c).dueLabel, type: "date", value: "" },
+        { key: "arcIds", label: LX(c).milestones, type: "checks", value: [],
+          options: p.milestones.map(function (m) { return { value: m.id, label: m.label }; }),
+          empty: "No " + LX(c).milestones.toLowerCase() + " yet - add one first to link it." },
         { key: "notes", label: "Notes (optional)", type: "textarea", value: "" }
       ],
       okLabel: "Add task",
@@ -1288,7 +1597,7 @@ function wireProjects() {
         function create(assigneeId) {
           p.tasks.push({
             id: uid(), title: v.title.trim(), type: v.type, status: v.status,
-            assigneeId: assigneeId, started: v.started, due: v.due,
+            assigneeId: assigneeId, started: v.started, due: v.due, arcIds: v.arcIds || [],
             notes: v.notes.trim(), entries: []
           });
           save();
@@ -1315,21 +1624,24 @@ function wireProjects() {
       const t = p.tasks.find(function (x) { return x.id === b.getAttribute("data-edit-task"); });
       if (!t) return;
       openModal({
-        title: "Edit task",
+        title: "Edit " + LX(c).task.toLowerCase(),
         fields: [
-          { key: "title", label: "Task", value: t.title },
-          { key: "type", label: "Type of work", type: "select", options: TASK_TYPES, value: t.type },
-          { key: "status", label: "Status", type: "select", options: TASK_STATUSES, value: t.status },
+          { key: "title", label: LX(c).task, value: t.title },
+          { key: "type", label: LX(c).typeLabel, type: "select", options: LX(c).taskTypes, value: t.type },
+          { key: "status", label: "Status", type: "select", options: LX(c).taskStatuses, value: t.status },
           { key: "assigneeId", label: "Assigned to", type: "select", options: memberOptions(c),
             value: t.assigneeId },
-          { key: "started", label: "Date started", type: "date", value: t.started },
-          { key: "due", label: "Due date", type: "date", value: t.due },
+          { key: "started", label: LX(c).startedLabel, type: "date", value: t.started },
+          { key: "due", label: LX(c).dueLabel, type: "date", value: t.due },
+          { key: "arcIds", label: LX(c).milestones, type: "checks", value: t.arcIds || [],
+            options: p.milestones.map(function (m) { return { value: m.id, label: m.label }; }),
+            empty: "No " + LX(c).milestones.toLowerCase() + " yet - add one first to link it." },
           { key: "notes", label: "Notes", type: "textarea", value: t.notes }
         ],
         validate: validateTaskDates,
         onSubmit: function (v) {
           t.title = v.title.trim(); t.type = v.type; t.status = v.status;
-          t.started = v.started; t.due = v.due; t.notes = v.notes.trim();
+          t.started = v.started; t.due = v.due; t.notes = v.notes.trim(); t.arcIds = v.arcIds || [];
           function finish(assigneeId) {
             t.assigneeId = assigneeId;
             save();
@@ -1350,7 +1662,8 @@ function wireProjects() {
       const id = b.getAttribute("data-del-task");
       const t = p.tasks.find(function (x) { return x.id === id; });
       if (!t) return;
-      if (!confirm('Delete task "' + t.title + '" and its ' + fmtDur(taskLoggedMs(t)) + " of logged time?")) return;
+      if (!confirm("Delete " + LX(c).task.toLowerCase() + ' "' + t.title + '" and its ' +
+        fmtDur(taskLoggedMs(t)) + " of logged time?")) return;
       if (state.running && state.running.taskId === id) state.running = null;
       p.tasks = p.tasks.filter(function (x) { return x.id !== id; });
       save();
@@ -1710,7 +2023,7 @@ function plannerHTML() {
     { key: 1, label: "Today &amp; undated", cls: "" },
     { key: 2, label: "Coming up", cls: "" }
   ];
-  html += '<div class="card planpanel"><div class="head"><h3 style="flex:1">Tasks</h3>' +
+  html += '<div class="card planpanel"><div class="head"><h3 style="flex:1">' + esc(LX(c).tasks) + "</h3>" +
     '<span class="small muted">' + items.length + " open</span></div>";
   if (!items.length) {
     html += '<div class="planempty">No open tasks in ' + esc(c.name) + ".</div>";
@@ -1726,7 +2039,7 @@ function plannerHTML() {
           : "no due date";
         html += '<div class="pt" data-task="' + i.task.id + '">' +
           '<div class="pn">' + esc(i.task.title) + "</div>" +
-          '<div class="pm"><span class="badge ' + TASK_STATUS_CLASS[i.task.status] + '">' + esc(i.task.status) + "</span>" +
+          '<div class="pm"><span class="badge ' + LX(c).taskStatusClass[i.task.status] + '">' + esc(i.task.status) + "</span>" +
             "<span>" + esc(i.project.name) + "</span><span>·</span><span>" + esc(due) + "</span></div>" +
           "</div>";
       });
@@ -2343,18 +2656,22 @@ function membersHTML() {
   const c = activeContainer();
   const members = containerMembers(c);
 
-  let html = '<div style="max-width:900px;margin:0 auto"><div class="card">' +
-    '<div class="head"><h3 style="flex:1">Members of ' + esc(c ? c.name : "") + "</h3>" +
-      '<button class="btn sm primary" data-act="newMember">+ Member</button></div>';
+  const lex = LX(c);
+  let html = '<div style="max-width:960px;margin:0 auto"><div class="card">' +
+    '<div class="head"><h3 style="flex:1">' + esc(lex.members) + " of " + esc(c ? c.name : "") + "</h3>" +
+      '<button class="btn sm primary" data-act="newMember">+ ' + esc(lex.member) + "</button></div>";
 
   html += '<div style="overflow:auto"><table><thead><tr>' +
-    "<th>Name</th><th>Team</th><th>E-mail</th><th class=\"right\">Tasks</th><th class=\"right\">Actions</th>" +
+    "<th>Name</th><th>" + esc(lex.memberCol) + "</th><th>E-mail</th><th class=\"right\">" +
+      esc(lex.roster ? "Characters" : lex.tasks) + "</th><th class=\"right\">Actions</th>" +
     "</tr></thead><tbody>" +
     members.map(function (m) {
-      const n = memberTaskCount(c, m.id);
-      return "<tr>" +
+      const chars = charactersOf(c, m.id);
+      const n = lex.roster ? chars.length : memberTaskCount(c, m.id);
+      let row = "<tr" + (lex.roster ? ' class="clickable" data-open-player="' + m.id + '"' : "") + ">" +
         '<td><div class="ttitle">' + esc(m.name) + "</div>" +
-          (m.self ? '<div class="small muted">That&rsquo;s you — cannot be removed</div>' : "") + "</td>" +
+          (m.self ? '<div class="small muted">That&rsquo;s you — cannot be removed</div>' : "") +
+          (lex.roster ? '<div class="small muted">' + (chars.length ? "click to see characters" : "no characters yet") + "</div>" : "") + "</td>" +
         "<td>" + (m.team ? esc(m.team) : '<span class="muted">—</span>') + "</td>" +
         "<td>" + (m.email
           ? '<a href="mailto:' + esc(m.email) + '">' + esc(m.email) + "</a>"
@@ -2364,10 +2681,28 @@ function membersHTML() {
           '<button class="btn sm ghost" data-edit-member="' + m.id + '">Edit</button>' +
           (m.self ? "" : '<button class="btn sm ghost danger" data-del-member="' + m.id + '">&times;</button>') +
         "</div></td></tr>";
+      if (lex.roster && state.ui.openPlayer === m.id) {
+        row += '<tr><td colspan="5" style="background:var(--panel-2)">' +
+          (chars.length
+            ? '<div class="small muted" style="margin-bottom:6px"><b>Characters played by ' + esc(m.name) + "</b></div>" +
+              chars.map(function (h) {
+                return '<div class="arcrow">' +
+                  '<span class="badge ' + CHAR_STATE_CLASS[h.entry.state] + '">' + esc(h.entry.state) + "</span>" +
+                  '<span class="an">' + esc(h.entry.name) + "</span>" +
+                  '<span class="small muted">' + esc(h.entry.archetype || "no archetype") + "</span>" +
+                  '<span class="small muted">' + esc(h.project.name) + "</span></div>";
+              }).join("")
+            : '<span class="hint">' + esc(m.name) + " has no characters in this container yet.</span>") +
+          "</td></tr>";
+      }
+      return row;
     }).join("") +
     "</tbody></table></div>";
 
-  html += '<div class="body"><span class="hint">These are the people you can assign tasks to in this container. ' +
+  html += '<div class="body"><span class="hint">' +
+    (lex.roster
+      ? "These are the people at your table. Click one to see every character they have played across your campaigns. "
+      : "These are the people you can assign tasks to in this container. ") +
     "They are labels for your own tracking — nothing is shared with them and no e-mail is ever sent.</span></div>";
   return html + "</div></div>";
 }
@@ -2379,6 +2714,14 @@ function wireMembers() {
   const add = view.querySelector('[data-act="newMember"]');
   if (add) add.onclick = function () { openMemberModal(c, null, null); };
 
+  view.querySelectorAll("[data-open-player]").forEach(function (row) {
+    row.onclick = function (e) {
+      if (e.target.closest("button") || e.target.closest("a")) return;
+      const id = row.getAttribute("data-open-player");
+      state.ui.openPlayer = state.ui.openPlayer === id ? null : id;
+      render();
+    };
+  });
   view.querySelectorAll("[data-edit-member]").forEach(function (b) {
     b.onclick = function () {
       const m = findMember(c, b.getAttribute("data-edit-member"));
@@ -2392,14 +2735,23 @@ function wireMembers() {
       const m = findMember(c, id);
       if (!m || m.self) return;
       const n = memberTaskCount(c, id);
-      const msg = n
-        ? "Remove " + m.name + "?\n\n" + n + " task" + (n === 1 ? "" : "s") +
-          " assigned to them will be reassigned to " + selfMember(c).name + "."
-        : "Remove " + m.name + "?";
+      const chars = charactersOf(c, id);
+      let msg = "Remove " + m.name + "?";
+      if (n) {
+        msg += "\n\n" + n + " " + LX(c).task.toLowerCase() + (n === 1 ? "" : "s") +
+          " assigned to them will be reassigned to " + selfMember(c).name + ".";
+      }
+      if (chars.length) {
+        msg += "\n\n" + chars.length + " character" + (chars.length === 1 ? "" : "s") +
+          " they played will also be removed.";
+      }
       if (!confirm(msg)) return;
       const meId = selfMember(c).id;
       c.projects.forEach(function (p) {
         p.tasks.forEach(function (t) { if (t.assigneeId === id) t.assigneeId = meId; });
+      });
+      c.projects.forEach(function (pr) {
+        pr.roster = pr.roster.filter(function (r) { return r.memberId !== id; });
       });
       c.members = c.members.filter(function (x) { return x.id !== id; });
       save();
@@ -2478,7 +2830,7 @@ function dueRowsHTML(label, items, cls) {
       '<td><div class="ttitle">' + esc(i.task.title) + "</div>" +
         '<div class="small muted">' + esc(i.task.type) + "</div></td>" +
       "<td>" + esc(i.project.name) + "</td>" +
-      '<td><span class="badge ' + TASK_STATUS_CLASS[i.task.status] + '">' + esc(i.task.status) + "</span></td>" +
+      '<td><span class="badge ' + LX(dc).taskStatusClass[i.task.status] + '">' + esc(i.task.status) + "</span></td>" +
       '<td><span class="who">' + (mine ? '<span class="me">' + esc(dm.name) + "</span>"
         : '<span class="other">' + esc(dm ? dm.name : "Unassigned") + "</span>") + "</span></td>" +
       '<td class="right mono nowrap">' + fmtDur(taskTotalMs(i.task)) + "</td>" +
@@ -2496,7 +2848,8 @@ function dueSectionHTML() {
 
   let html = '<div class="card" style="margin-bottom:16px">' +
     '<div class="head"><h3 style="flex:1">What&rsquo;s due</h3>' +
-      '<span class="small muted">Open tasks with a due date</span></div>' +
+      '<span class="small muted">Open ' + esc(LX().tasks.toLowerCase()) + " with a " +
+        esc(LX().dueLabel.toLowerCase()) + "</span></div>" +
     '<div class="body">' +
       '<div class="kpis">' +
         '<div class="kpi' + (b.overdue.length ? " alarm" : "") + '"><div class="v mono">' + b.overdue.length +
@@ -2509,10 +2862,12 @@ function dueSectionHTML() {
 
   if (!total) {
     html += '<div class="empty">Nothing due in the next 14 days.<br>' +
-      '<span class="hint">Only open tasks with a due date appear here.</span></div>';
+      '<span class="hint">Only open ' + esc(LX().tasks.toLowerCase()) + " with a " +
+      esc(LX().dueLabel.toLowerCase()) + " appear here.</span></div>";
   } else {
     html += '<div style="overflow:auto"><table><thead><tr>' +
-      "<th>Due</th><th>Task</th><th>Project</th><th>Status</th><th>Assigned to</th><th class=\"right\">Logged</th>" +
+      "<th>Due</th><th>" + esc(LX().task) + "</th><th>" + esc(LX().project) +
+        "</th><th>Status</th><th>Assigned to</th><th class=\"right\">Logged</th>" +
       "</tr></thead><tbody>" +
       dueRowsHTML("Overdue", b.overdue, "due-over") +
       dueRowsHTML("Today", b.today, "due-soon") +
@@ -2594,13 +2949,13 @@ function reportsHTML() {
   "</div>";
 
   html += '<div class="wrap" style="grid-template-columns:1fr 1fr">';
-  html += '<div class="card"><div class="head"><h3>By project</h3></div><div class="body">' +
+  html += '<div class="card"><div class="head"><h3>By ' + esc(LX(c).project.toLowerCase()) + "</h3></div><div class=\"body\">" +
     barTableHTML(groupSum(rows, function (r) { return r.project.name; }), total) + "</div></div>";
-  html += '<div class="card"><div class="head"><h3>By type of work</h3></div><div class="body">' +
+  html += '<div class="card"><div class="head"><h3>By ' + esc(LX(c).typeLabel.toLowerCase()) + "</h3></div><div class=\"body\">" +
     barTableHTML(groupSum(rows, function (r) { return r.task.type; }), total) + "</div></div>";
   html += "</div>";
 
-  html += '<div class="card" style="margin-top:16px"><div class="head"><h3>By department</h3></div><div class="body">' +
+  html += '<div class="card" style="margin-top:16px"><div class="head"><h3>By ' + esc(LX(c).deptLabel.toLowerCase()) + "</h3></div><div class=\"body\">" +
     barTableHTML(groupSum(rows, function (r) { return r.project.department || "(unassigned)"; }), total) + "</div></div>";
 
   /* task breakdown */
@@ -2612,12 +2967,14 @@ function reportsHTML() {
   });
   const taskRows = Array.from(byTask.values()).sort(function (a, b) { return b.ms - a.ms; });
 
-  html += '<div class="card" style="margin-top:16px"><div class="head"><h3>Task detail</h3></div>';
+  html += '<div class="card" style="margin-top:16px"><div class="head"><h3>' +
+    esc(LX(c).task) + " detail</h3></div>";
   if (!taskRows.length) {
     html += '<div class="empty">No time logged in this period.</div>';
   } else {
-    html += '<div style="overflow:auto"><table><thead><tr><th>Project</th><th>Task</th><th>Type</th><th>Person</th>' +
-      '<th>Department</th><th class="right">Time</th><th class="right">Hours</th></tr></thead><tbody>' +
+    html += '<div style="overflow:auto"><table><thead><tr><th>' + esc(LX(c).project) + "</th><th>" +
+      esc(LX(c).task) + '</th><th>Type</th><th>' + esc(LX(c).personLabel) + "</th>" +
+      "<th>" + esc(LX(c).deptLabel) + '</th><th class="right">Time</th><th class="right">Hours</th></tr></thead><tbody>' +
       taskRows.map(function (r) {
         return "<tr><td>" + esc(r.project.name) + "</td><td>" + esc(r.task.title) + "</td>" +
           '<td><span class="type-pill">' + esc(r.task.type) + "</span></td>" +
@@ -2745,12 +3102,19 @@ function boot() {
   document.getElementById("addContainerBtn").onclick = function () {
     openModal({
       title: "New container",
-      intro: "Containers keep separate worlds apart — Work, Personal, GTAW…",
-      fields: [{ key: "name", label: "Container name", value: "", placeholder: "e.g. GTAW" }],
+      intro: "Containers keep separate worlds apart — Work, Personal, a tabletop campaign…",
+      fields: [
+        { key: "name", label: "Container name", value: "", placeholder: "e.g. GTAW" },
+        { key: "kind", label: "What is it for?", type: "select",
+          options: [
+            { value: "work", label: "Work — projects, tasks, departments" },
+            { value: "campaign", label: "Roleplay — campaigns, sessions, players" }
+          ], value: "work" }
+      ],
       okLabel: "Create",
       validate: function (v) { return v.name.trim() ? null : "Name is required."; },
       onSubmit: function (v) {
-        const c = { id: uid(), name: v.name.trim(), projects: [] };
+        const c = { id: uid(), name: v.name.trim(), kind: v.kind, projects: [] };
         state.containers.push(c);
         state.ui.containerId = c.id;
         state.ui.projectId = null;

@@ -88,6 +88,45 @@ task form - pick "+ Add someone new..." in the Assigned to dropdown.
 Renaming a member updates every task assigned to them. Removing a member asks
 first, and reassigns their tasks to Myself rather than losing them.
 
+ROLEPLAY MODE
+-------------
+A container can be set to Roleplay instead of Work, either when you create it
+or later from its settings. The machinery is identical - timers, planner,
+reports, printable records all work the same - but the vocabulary changes:
+
+  Project    becomes  Campaign
+  Task       becomes  Session
+  Milestone  becomes  Plot arc
+  Member     becomes  Player
+  Person     becomes  Game Master
+  Department becomes  System
+
+Campaign statuses are Planned, Active, On Hiatus, Completed, Abandoned.
+Session statuses are Scheduled, Confirmed, Awaiting Players, Prepped, Played,
+Postponed, Cancelled. Activities are Live Session, GM Prep, Session Zero,
+Worldbuilding, Rules Reading, Recap & Notes, Maps & Assets, Downtime, and
+Scheduling & Admin - so you can see your prep-to-play ratio in Reports.
+
+Due date becomes SESSION DATE, which means "what's due" in Reports becomes
+your upcoming sessions with no extra work.
+
+PLOT ARCS work like milestones, but a session can belong to SEVERAL arcs at
+once - tick them in the session's Plot arcs list. Click an arc's name to see
+every session linked to it, with the total time logged against that arc.
+
+CAST is a per-campaign list of characters. A character belongs to a campaign,
+not to a player, so the same person can play different characters in different
+campaigns, and several characters in one campaign as they come and go. Each has
+a name, an archetype (class, profession, or a short description), the player
+behind it, and a state: Active, Retired or Deceased.
+
+In the Players list, click any player to see every character they have played
+across your campaigns.
+
+Switching a container between Work and Roleplay re-maps statuses and activity
+types by position, and switching back restores them. Names, notes, dates, arc
+links, cast and logged time are never touched.
+
 PLANNER is a companion to the tracking, not a replacement for it. It shows a
 week at a time, with your open tasks in a panel on the right - overdue first,
 then today and anything without a due date, then by due date.
