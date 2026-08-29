@@ -107,6 +107,20 @@ you can see your whole day without mixing Work and Personal together. They sit
 behind your own blocks and are free to overlap them, so a busy Personal day
 never squeezes your Work blocks into slivers.
 
+EXPORT RECORD produces a printable record of your time, for filing or for
+showing someone. Choose a single day (portrait) or a whole week (landscape),
+and it prints through your browser - pick "Save as PDF" in the print dialog to
+keep it.
+
+The page is a graphical timeline of the period, the same shape as the Planner.
+What it draws is your ACTUAL logged time as solid blocks, because the point of
+the record is what you did, not what you meant to do. Your planned blocks can
+be shown behind as dashed outlines for comparison, or left off.
+
+Tick "include detailed data" and a second page follows, listing every session
+day by day: task, project, type, time started, time stopped, duration and
+decimal hours, with a total per day and a grand total.
+
 IMPORT .ICS reads a calendar file exported from Outlook or similar and turns
 its meetings into blocks, so you do not have to retype them. It reads the file
 straight from your disk - nothing is uploaded. Repeating meetings and all-day
