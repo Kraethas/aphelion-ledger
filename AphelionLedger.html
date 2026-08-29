@@ -242,6 +242,13 @@ tr.running{background:var(--green-soft)}
 .arcrow:last-child{border-bottom:none}
 .arcrow .an{flex:1;font-weight:600;font-size:13px;min-width:120px}
 .att{color:var(--accent);font-weight:600}
+.docs{display:flex;flex-direction:column;gap:2px}
+.docrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px dashed var(--border);flex-wrap:wrap}
+.docrow:last-of-type{border-bottom:none}
+.dicon{opacity:.7}
+.dname{font-weight:600;font-size:13px;flex:1;min-width:140px;word-break:break-all}
+.dpath{font-family:ui-monospace,Consolas,monospace;font-size:11px;opacity:.75}
+.docsub{border-top:1px dashed var(--border);margin-top:8px;padding-top:4px}
 tr.clickable{cursor:pointer}
 tr.clickable:hover{background:var(--panel-2)}
 
@@ -358,6 +365,7 @@ tr.duerow:hover{background:var(--accent-soft)}
   <button class="btn sm" id="importBtn">Restore</button>
   <input type="file" id="importFile" accept="application/json,.json" style="display:none">
   <input type="file" id="icsFile" accept=".ics,text/calendar" style="display:none">
+  <input type="file" id="docFile" multiple style="display:none">
 </header>
 
 <div id="runbar">
@@ -713,6 +721,8 @@ function normalise() {
       p.milestones = Array.isArray(p.milestones) ? p.milestones : [];
       // Characters belong to a campaign, not to a player: one person can play
       // several characters here, and the same person elsewhere is someone else.
+      p.docs = Array.isArray(p.docs) ? p.docs : [];
+      p.docFolder = p.docFolder || "";
       p.roster = Array.isArray(p.roster) ? p.roster : [];
       p.roster = p.roster.filter(function (r) { return !!findMember(c, r.memberId); });
       p.roster.forEach(function (r) {
@@ -728,6 +738,7 @@ function normalise() {
         m.label = m.label || "";
         m.due = m.due || "";
         m.done = !!m.done;
+        m.docs = Array.isArray(m.docs) ? m.docs : [];
       });
       p.tasks.forEach(function (t) {
         t.id = t.id || uid();
@@ -769,6 +780,7 @@ function normalise() {
         t.started = t.started || "";
         t.due = t.due || "";
         // Who was at the table. Only meaningful for sessions, harmless otherwise.
+        t.docs = Array.isArray(t.docs) ? t.docs : [];
         t.attendance = Array.isArray(t.attendance) ? t.attendance : [];
         t.attendance = t.attendance.filter(function (id) { return !!findMember(c, id); });
         // Sessions can belong to several plot arcs at once.
@@ -1259,6 +1271,27 @@ function projectDetailHTML(p) {
       "</div>" +
     "</div>";
 
+  /* --- documents --- */
+  html += '<div class="card" style="margin-bottom:16px">' +
+    '<div class="head"><h3 style="flex:1">Documents</h3>' +
+      (p.docFolder
+        ? '<span class="small muted">folder: <b>' + esc(p.docFolder) + "</b></span>"
+        : '<span class="small muted">no folder chosen yet</span>') +
+      '<button class="btn sm ghost" data-act="pickFolder">' +
+        (p.docFolder ? "Change folder" : "Choose folder") + "</button></div>" +
+    '<div class="body">';
+  if (!docsSupported()) {
+    html += '<div class="hint">Attaching documents needs the File System Access API, which this browser ' +
+      "does not offer. Chrome or Edge on the desktop will work. Everything else in Ledger runs fine without it.</div>";
+  } else {
+    html += docsHTML(p.docs, "project", p.id,
+      "No documents on the " + lex.project.toLowerCase() + " itself yet. Files are copied into your chosen folder.");
+    html += '<div class="hint" style="margin-top:10px">Files are copied into <b>' +
+      esc(p.docFolder || "the folder you choose") + "</b>, with " + esc(lex.tasks.toLowerCase()) +
+      " and " + esc(lex.milestones.toLowerCase()) + " in their own sub-folders. Ledger never moves or deletes your originals.</div>";
+  }
+  html += "</div></div>";
+
   /* --- cast (campaigns only) --- */
   if (lex.roster) {
     html += '<div class="card" style="margin-bottom:16px">' +
@@ -1359,6 +1392,9 @@ function milestoneHTML(m, p) {
           '<span class="small mono">' + fmtDur(taskTotalMs(t)) + "</span></div>";
       }).join("");
     }
+    html += '<div class="docsub"><div class="small muted" style="margin:6px 0 4px"><b>Documents</b></div>' +
+      docsHTML(m.docs, "milestone", m.id,
+        "Nothing attached to this " + esc(lex.milestone.toLowerCase()) + " yet.") + "</div>";
     html += "</div>";
   }
   return html;
@@ -1396,6 +1432,8 @@ function taskRowHTML(p, t) {
           (entries.length ? ' · <a href="#" data-entries="' + t.id + '">details</a>' : "") +
           (kindOf(c) === "campaign" && (t.attendance || []).length
             ? ' · <span class="att">' + t.attendance.length + " at the table</span>" : "") +
+          ' · <a href="#" data-docs="' + t.id + '">' +
+            ((t.docs || []).length ? t.docs.length + " doc" + (t.docs.length === 1 ? "" : "s") : "docs") + "</a>" +
           "</div></td>" +
       '<td><span class="type-pill">' + esc(t.type) + "</span></td>" +
       '<td><span class="badge ' + LX(c).taskStatusClass[t.status] + '">' + esc(t.status) + "</span></td>" +
@@ -1419,6 +1457,14 @@ function taskRowHTML(p, t) {
       "</div></td>" +
     "</tr>";
 
+  if (state.ui.openDocs === t.id) {
+    row += '<tr><td colspan="7" style="background:var(--panel-2)">' +
+      '<div class="small muted" style="margin-bottom:6px"><b>Documents for ' + esc(t.title) + "</b></div>" +
+      (docsSupported()
+        ? docsHTML(t.docs, "task", t.id, "Nothing attached to this " + esc(LX(c).task.toLowerCase()) + " yet.")
+        : '<span class="hint">Attaching documents needs Chrome or Edge on the desktop.</span>') +
+      "</td></tr>";
+  }
   if (state.ui.openEntries === t.id) {
     row += '<tr><td colspan="7" style="background:var(--panel-2)">' +
       '<div class="small muted" style="margin-bottom:6px"><b>Logged sessions</b> — delete any that were left running by mistake.</div>' +
@@ -1730,11 +1776,52 @@ function wireProjects() {
     };
   });
 
+  const pickBtn = view.querySelector('[data-act="pickFolder"]');
+  if (pickBtn) pickBtn.onclick = function () {
+    if (!docsSupported()) {
+      alert("Choosing a folder needs the File System Access API. Chrome or Edge on the desktop will work.");
+      return;
+    }
+    pickRoot(p).then(function (h) { if (h) render(); });
+  };
+
+  view.querySelectorAll("[data-docs]").forEach(function (a) {
+    a.onclick = function (e) {
+      e.preventDefault();
+      const id = a.getAttribute("data-docs");
+      state.ui.openDocs = state.ui.openDocs === id ? null : id;
+      state.ui.openEntries = null;
+      render();
+    };
+  });
+  view.querySelectorAll("[data-doc-add]").forEach(function (b) {
+    b.onclick = function () {
+      const parts = b.getAttribute("data-doc-add").split("|");
+      attachDocuments(p, parts[0], parts[1]);
+    };
+  });
+  view.querySelectorAll("[data-doc-open]").forEach(function (a) {
+    a.onclick = function (e) {
+      e.preventDefault();
+      const parts = a.getAttribute("data-doc-open").split("|");
+      const owner = docOwner(p, parts[0], parts[1]);
+      const doc = owner && (owner.docs || []).find(function (d) { return d.id === parts[2]; });
+      if (doc) openDocument(p, doc);
+    };
+  });
+  view.querySelectorAll("[data-doc-del]").forEach(function (b) {
+    b.onclick = function () {
+      const parts = b.getAttribute("data-doc-del").split("|");
+      removeDocument(p, parts[0], parts[1], parts[2]);
+    };
+  });
+
   view.querySelectorAll("[data-entries]").forEach(function (a) {
     a.onclick = function (e) {
       e.preventDefault();
       const id = a.getAttribute("data-entries");
       state.ui.openEntries = state.ui.openEntries === id ? null : id;
+      state.ui.openDocs = null;
       render();
     };
   });
@@ -1777,6 +1864,251 @@ function rangeBounds(key) {
     case "last30": return [startOfDay - 29 * 86400000, Infinity];
     default: return [-Infinity, Infinity];
   }
+}
+
+
+/* =========================================================
+   Documents
+   -----------------------------------------------------------
+   Files are COPIED into a folder you choose, with the project as
+   the root, and the app keeps a link to the copy. It needs the
+   File System Access API (Chrome or Edge); everything else in
+   Ledger works without it.
+   ========================================================= */
+
+const DOCS_DB = "aphelionLedgerDocs";
+const DOCS_STORE = "roots";
+
+function docsSupported() { return typeof window.showDirectoryPicker === "function"; }
+
+function idbOpen() {
+  return new Promise(function (res, rej) {
+    const rq = indexedDB.open(DOCS_DB, 1);
+    rq.onupgradeneeded = function () { rq.result.createObjectStore(DOCS_STORE); };
+    rq.onsuccess = function () { res(rq.result); };
+    rq.onerror = function () { rej(rq.error); };
+  });
+}
+function idbRun(mode, fn) {
+  return idbOpen().then(function (db) {
+    return new Promise(function (res, rej) {
+      const tx = db.transaction(DOCS_STORE, mode);
+      const rq = fn(tx.objectStore(DOCS_STORE));
+      tx.oncomplete = function () { res(rq && rq.result); };
+      tx.onerror = function () { rej(tx.error); };
+    });
+  });
+}
+function rootPut(id, h) { return idbRun("readwrite", function (st) { return st.put(h, id); }); }
+function rootGet(id) { return idbRun("readonly", function (st) { return st.get(id); }); }
+function rootDel(id) { return idbRun("readwrite", function (st) { return st.delete(id); }); }
+
+/** Windows-safe folder and file names. */
+function safeName(v) {
+  return String(v || "").replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60) || "untitled";
+}
+
+function ensurePermission(handle) {
+  const opts = { mode: "readwrite" };
+  return handle.queryPermission(opts).then(function (st) {
+    if (st === "granted") return true;
+    return handle.requestPermission(opts).then(function (r) { return r === "granted"; });
+  });
+}
+
+/** The project's document root, prompting for a folder the first time. */
+function projectRoot(project, allowPick) {
+  if (!docsSupported()) return Promise.resolve(null);
+  return rootGet("root:" + project.id).then(function (h) {
+    if (h) {
+      return ensurePermission(h).then(function (ok) {
+        if (ok) return h;
+        if (allowPick === false) return null;
+        return pickRoot(project);
+      });
+    }
+    if (allowPick === false) return null;
+    return pickRoot(project);
+  });
+}
+
+function pickRoot(project) {
+  return window.showDirectoryPicker({ mode: "readwrite" }).then(function (h) {
+    return rootPut("root:" + project.id, h).then(function () {
+      project.docFolder = h.name;
+      save();
+      return h;
+    });
+  }).catch(function (e) {
+    if (e && e.name === "AbortError") return null;
+    alert("That folder could not be opened.\n\n" + (e && e.message ? e.message : e));
+    return null;
+  });
+}
+
+function ensureDirPath(root, parts) {
+  let chain = Promise.resolve(root);
+  parts.forEach(function (part) {
+    chain = chain.then(function (h) { return h.getDirectoryHandle(safeName(part), { create: true }); });
+  });
+  return chain;
+}
+
+/** Never silently overwrite a file that is already there. */
+function uniqueFileName(dir, name) {
+  let base = name, ext = "";
+  const dot = name.lastIndexOf(".");
+  if (dot > 0) { base = name.slice(0, dot); ext = name.slice(dot); }
+  function attempt(candidate, n) {
+    return dir.getFileHandle(candidate)
+      .then(function () { return attempt(base + " (" + n + ")" + ext, n + 1); })
+      .catch(function () { return candidate; });
+  }
+  return attempt(name, 2);
+}
+
+function pickFiles() {
+  return new Promise(function (res) {
+    const inp = document.getElementById("docFile");
+    inp.value = "";
+    inp.onchange = function () {
+      const files = Array.from(inp.files || []);
+      inp.value = "";
+      res(files);
+    };
+    inp.click();
+  });
+}
+
+/** Where a target's files live, relative to the project root. */
+function docParts(c, ownerKind, target) {
+  if (ownerKind === "task") return [LX(c).tasks, target.title];
+  if (ownerKind === "milestone") return [LX(c).milestones, target.label];
+  return [];
+}
+
+function docOwner(project, ownerKind, ownerId) {
+  if (ownerKind === "project") return project;
+  if (ownerKind === "task") return project.tasks.find(function (t) { return t.id === ownerId; });
+  return project.milestones.find(function (m) { return m.id === ownerId; });
+}
+
+function attachDocuments(project, ownerKind, ownerId) {
+  if (!docsSupported()) {
+    alert(
+      "Attaching documents needs the File System Access API, which this browser does not offer.\n\n" +
+      "Chrome or Edge on the desktop will work. Everything else in Ledger runs fine without it."
+    );
+    return;
+  }
+  const c = activeContainer();
+  const target = docOwner(project, ownerKind, ownerId);
+  if (!target) return;
+  let dirHandle = null;
+  projectRoot(project, true).then(function (root) {
+    if (!root) return null;
+    return ensureDirPath(root, docParts(c, ownerKind, target));
+  }).then(function (dir) {
+    if (!dir) return null;
+    dirHandle = dir;
+    return pickFiles();
+  }).then(function (files) {
+    if (!files || !files.length) return null;
+    let chain = Promise.resolve();
+    const added = [];
+    files.forEach(function (f) {
+      chain = chain.then(function () {
+        return uniqueFileName(dirHandle, f.name).then(function (name) {
+          return dirHandle.getFileHandle(name, { create: true }).then(function (fh) {
+            return fh.createWritable().then(function (w) {
+              return w.write(f).then(function () { return w.close(); }).then(function () {
+                added.push({
+                  id: uid(), name: name, size: f.size, added: now(),
+                  path: docParts(c, ownerKind, target).map(safeName).concat([name]).join("/")
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+    return chain.then(function () { return added; });
+  }).then(function (added) {
+    if (!added || !added.length) return;
+    target.docs = (target.docs || []).concat(added);
+    save();
+    render();
+  }).catch(function (e) {
+    if (e && e.name === "AbortError") return;
+    alert("Those files could not be copied.\n\n" + (e && e.message ? e.message : e));
+  });
+}
+
+function openDocument(project, doc) {
+  projectRoot(project, false).then(function (root) {
+    if (!root) {
+      alert("Reconnect this " + LX().project.toLowerCase() + "'s folder first, then try again.");
+      return null;
+    }
+    const parts = doc.path.split("/");
+    const file = parts.pop();
+    let chain = Promise.resolve(root);
+    parts.forEach(function (part) {
+      chain = chain.then(function (h) { return h.getDirectoryHandle(part); });
+    });
+    return chain.then(function (dir) { return dir.getFileHandle(file); });
+  }).then(function (fh) {
+    if (!fh) return;
+    return fh.getFile().then(function (f) {
+      const url = URL.createObjectURL(f);
+      window.open(url, "_blank");
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    });
+  }).catch(function () {
+    alert("That file could not be found.\n\nIt may have been moved or renamed outside Ledger.\n\nExpected: " + doc.path);
+  });
+}
+
+function removeDocument(project, ownerKind, ownerId, docId) {
+  const target = docOwner(project, ownerKind, ownerId);
+  if (!target) return;
+  const doc = (target.docs || []).find(function (d) { return d.id === docId; });
+  if (!doc) return;
+  if (!confirm('Remove the link to "' + doc.name + '"?\n\nThe file itself stays in your folder — Ledger will not delete it.')) return;
+  target.docs = target.docs.filter(function (d) { return d.id !== docId; });
+  save();
+  render();
+}
+
+function fmtBytes(n) {
+  if (!n && n !== 0) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(0) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+
+/** A document list plus its attach button, for any owner. */
+function docsHTML(docs, ownerKind, ownerId, emptyText) {
+  const list = docs || [];
+  let html = '<div class="docs">';
+  if (!list.length) {
+    html += '<span class="hint">' + esc(emptyText) + "</span>";
+  } else {
+    html += list.map(function (d) {
+      return '<div class="docrow">' +
+        '<span class="dicon">&#128196;</span>' +
+        '<a href="#" class="dname" data-doc-open="' + ownerKind + "|" + ownerId + "|" + d.id + '">' +
+          esc(d.name) + "</a>" +
+        '<span class="small muted dpath">' + esc(d.path) + "</span>" +
+        '<span class="small muted">' + esc(fmtBytes(d.size)) + "</span>" +
+        '<button class="btn sm ghost danger" data-doc-del="' + ownerKind + "|" + ownerId + "|" + d.id +
+          '" title="Remove the link, keep the file">&times;</button>' +
+        "</div>";
+    }).join("");
+  }
+  html += '<div style="margin-top:8px"><button class="btn sm" data-doc-add="' + ownerKind + "|" + ownerId +
+    '">+ Attach documents</button></div></div>';
+  return html;
 }
 
 /* =========================================================

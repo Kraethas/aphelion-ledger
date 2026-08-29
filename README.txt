@@ -139,6 +139,35 @@ Switching a container between Work and Roleplay re-maps statuses and activity
 types by position, and switching back restores them. Names, notes, dates, arc
 links, cast and logged time are never touched.
 
+DOCUMENTS
+---------
+Each project (or campaign) can have a folder on your disk. Open the project,
+press "Choose folder" in the Documents card, and pick one - that folder becomes
+the root for everything filed against that project.
+
+From then on, "Attach documents" is available on the project itself, on every
+task/session (the "docs" link under its name), and on every milestone/plot arc
+(inside the panel that opens when you click its name). Pick one or more files
+and Ledger COPIES them into the right sub-folder:
+
+  <your folder>/                        project-level documents
+  <your folder>/Tasks/<task name>/      per task     (Sessions/ in roleplay)
+  <your folder>/Milestones/<label>/     per milestone (Plot arcs/ in roleplay)
+
+Your originals are never moved or altered - a copy is made. If a file of the
+same name is already there, the copy is saved as "name (2).ext" rather than
+overwriting anything. Clicking a document's name opens the copy. Pressing the
+x removes Ledger's link to it; the file itself stays on disk, always.
+
+REQUIREMENTS: this one feature needs the File System Access API, which means
+Chrome or Edge on the desktop. Firefox and Safari do not offer it, and Ledger
+will say so plainly instead of half-working. Everything else in Ledger runs
+fine in any browser.
+
+The folder permission is remembered between sessions, but browsers ask you to
+confirm it again after a restart - that is the browser protecting your disk,
+not a bug. If you move or rename the folder outside Ledger, choose it again.
+
 PLANNER is a companion to the tracking, not a replacement for it. It shows a
 week at a time, with your open tasks in a panel on the right - overdue first,
 then today and anything without a due date, then by due date.
