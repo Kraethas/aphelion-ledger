@@ -541,10 +541,15 @@ function memberOptions(c) {
   opts.push({ value: NEW_MEMBER, label: "+ Add someone new…" });
   return opts;
 }
-/** Attendance across sessions that actually happened (status Played). */
-function attendanceFor(c, memberId) {
+/**
+ * Attendance across sessions that actually happened (status Played).
+ * Pass a project to scope it to one campaign - across a whole container the
+ * denominator would include campaigns the player is not even in.
+ */
+function attendanceFor(c, memberId, project) {
   let played = 0, attended = 0;
-  (c && c.projects || []).forEach(function (p) {
+  const scope = project ? [project] : (c && c.projects || []);
+  scope.forEach(function (p) {
     p.tasks.forEach(function (t) {
       if (t.status !== "Played") return;
       played++;
@@ -552,6 +557,17 @@ function attendanceFor(c, memberId) {
     });
   });
   return { played: played, attended: attended };
+}
+
+/** Per-campaign attendance for a player, only where they actually appear. */
+function attendanceByCampaign(c, memberId) {
+  const out = [];
+  (c && c.projects || []).forEach(function (p) {
+    const a = attendanceFor(c, memberId, p);
+    const cast = (p.roster || []).some(function (r) { return r.memberId === memberId; });
+    if (a.attended || cast) out.push({ project: p, played: a.played, attended: a.attended });
+  });
+  return out;
 }
 
 /** Shared field list for the new-session and edit-session forms. */
@@ -2917,7 +2933,7 @@ function campaignLogHTML(projectId, opts) {
     html += "<h3>Cast</h3><table><thead><tr><th>Character</th><th>Archetype</th><th>Player</th>" +
       "<th>State</th><th class=\"r\">Sessions attended</th></tr></thead><tbody>";
     p.roster.forEach(function (r) {
-      const a = attendanceFor(c, r.memberId);
+      const a = attendanceFor(c, r.memberId, p);
       html += "<tr><td>" + esc(r.name) + "</td><td>" + esc(r.archetype || "—") + "</td>" +
         "<td>" + esc(memberName(c, r.memberId)) + "</td><td>" + esc(r.state) + "</td>" +
         '<td class="r">' + a.attended + " of " + a.played + "</td></tr>";
@@ -3186,12 +3202,13 @@ function membersHTML() {
       if (lex.roster && state.ui.openPlayer === m.id) {
         row += '<tr><td colspan="5" style="background:var(--panel-2)">' +
           (function () {
-            const a = attendanceFor(c, m.id);
-            return a.played
-              ? '<div class="small" style="margin-bottom:8px"><b>Attended ' + a.attended + " of " + a.played +
-                " played " + (a.played === 1 ? "session" : "sessions") + "</b>" +
-                '<span class="muted"> · ' + Math.round(a.attended / a.played * 100) + "%</span></div>"
-              : "";
+            const rows = attendanceByCampaign(c, m.id).filter(function (r) { return r.played; });
+            if (!rows.length) return "";
+            return '<div class="small" style="margin-bottom:9px">' + rows.map(function (r) {
+              return "<div><b>" + r.attended + " of " + r.played + "</b> played " +
+                (r.played === 1 ? "session" : "sessions") + " in " + esc(r.project.name) +
+                '<span class="muted"> · ' + Math.round(r.attended / r.played * 100) + "%</span></div>";
+            }).join("") + "</div>";
           })() +
           (chars.length
             ? '<div class="small muted" style="margin-bottom:6px"><b>Characters played by ' + esc(m.name) + "</b></div>" +
