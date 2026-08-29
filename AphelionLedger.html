@@ -241,6 +241,7 @@ tr.running{background:var(--green-soft)}
 .arcrow{display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px dashed var(--border);flex-wrap:wrap}
 .arcrow:last-child{border-bottom:none}
 .arcrow .an{flex:1;font-weight:600;font-size:13px;min-width:120px}
+.att{color:var(--accent);font-weight:600}
 tr.clickable{cursor:pointer}
 tr.clickable:hover{background:var(--panel-2)}
 
@@ -532,6 +533,51 @@ function memberOptions(c) {
   opts.push({ value: NEW_MEMBER, label: "+ Add someone new…" });
   return opts;
 }
+/** Attendance across sessions that actually happened (status Played). */
+function attendanceFor(c, memberId) {
+  let played = 0, attended = 0;
+  (c && c.projects || []).forEach(function (p) {
+    p.tasks.forEach(function (t) {
+      if (t.status !== "Played") return;
+      played++;
+      if ((t.attendance || []).indexOf(memberId) >= 0) attended++;
+    });
+  });
+  return { played: played, attended: attended };
+}
+
+/** Shared field list for the new-session and edit-session forms. */
+function taskFieldsFor(c, p, t) {
+  const lex = LX(c);
+  const campaign = kindOf(c) === "campaign";
+  const arcOpts = p.milestones.map(function (m) { return { value: m.id, label: m.label }; });
+  const fields = [
+    { key: "title", label: lex.task, value: t ? t.title : "",
+      placeholder: campaign ? "e.g. Session 12 - Into the catacombs" : "e.g. Kick-off call with Finance" },
+    { key: "type", label: lex.typeLabel, type: "select", options: lex.taskTypes,
+      value: t ? t.type : lex.defaultType },
+    { key: "status", label: "Status", type: "select", options: lex.taskStatuses,
+      value: t ? t.status : lex.taskStatuses[0] },
+    { key: "assigneeId", label: campaign ? "Run by" : "Assigned to", type: "select",
+      options: memberOptions(c), value: t ? t.assigneeId : selfMember(c).id },
+    { key: "started", label: lex.startedLabel, type: "date", value: t ? t.started : "" },
+    { key: "due", label: lex.dueLabel, type: "date", value: t ? t.due : "" },
+    { key: "arcIds", label: lex.milestones, type: "checks", value: t ? (t.arcIds || []) : [],
+      options: arcOpts, empty: "No " + lex.milestones.toLowerCase() + " yet - add one first to link it." }
+  ];
+  if (campaign) {
+    fields.push({
+      key: "attendance", label: "Who was there", type: "checks",
+      value: t ? (t.attendance || []) : [],
+      options: containerMembers(c).map(function (m) { return { value: m.id, label: m.name }; }),
+      empty: "No players yet - add them under Players."
+    });
+  }
+  fields.push({ key: "notes", label: t ? "Notes" : "Notes (optional)", type: "textarea",
+    value: t ? t.notes : "" });
+  return fields;
+}
+
 /** Every character a member has played, across the container's campaigns. */
 function charactersOf(c, memberId) {
   const out = [];
@@ -722,6 +768,9 @@ function normalise() {
         delete t.assignee;
         t.started = t.started || "";
         t.due = t.due || "";
+        // Who was at the table. Only meaningful for sessions, harmless otherwise.
+        t.attendance = Array.isArray(t.attendance) ? t.attendance : [];
+        t.attendance = t.attendance.filter(function (id) { return !!findMember(c, id); });
         // Sessions can belong to several plot arcs at once.
         t.arcIds = Array.isArray(t.arcIds) ? t.arcIds : [];
         t.arcIds = t.arcIds.filter(function (id) {
@@ -1344,7 +1393,10 @@ function taskRowHTML(p, t) {
       '<td><div class="ttitle' + (closed ? " closed" : "") + '">' + esc(t.title) + "</div>" +
         (t.notes ? '<div class="small muted">' + esc(t.notes) + "</div>" : "") +
         '<div class="small muted">' + entries.length + " session" + (entries.length === 1 ? "" : "s") +
-          (entries.length ? ' · <a href="#" data-entries="' + t.id + '">details</a>' : "") + "</div></td>" +
+          (entries.length ? ' · <a href="#" data-entries="' + t.id + '">details</a>' : "") +
+          (kindOf(c) === "campaign" && (t.attendance || []).length
+            ? ' · <span class="att">' + t.attendance.length + " at the table</span>" : "") +
+          "</div></td>" +
       '<td><span class="type-pill">' + esc(t.type) + "</span></td>" +
       '<td><span class="badge ' + LX(c).taskStatusClass[t.status] + '">' + esc(t.status) + "</span></td>" +
       '<td><span class="who">' + (mine
@@ -1577,20 +1629,7 @@ function wireProjects() {
   if (newTask) newTask.onclick = function () {
     openModal({
       title: "New " + LX(c).task.toLowerCase() + " in " + p.name,
-      fields: [
-        { key: "title", label: LX(c).task, value: "",
-          placeholder: kindOf(c) === "campaign" ? "e.g. Session 12 - Into the catacombs" : "e.g. Kick-off call with Finance" },
-        { key: "type", label: LX(c).typeLabel, type: "select", options: LX(c).taskTypes, value: LX(c).defaultType },
-        { key: "status", label: "Status", type: "select", options: LX(c).taskStatuses, value: LX(c).taskStatuses[0] },
-        { key: "assigneeId", label: "Assigned to", type: "select", options: memberOptions(c),
-          value: selfMember(c).id },
-        { key: "started", label: LX(c).startedLabel, type: "date", value: "" },
-        { key: "due", label: LX(c).dueLabel, type: "date", value: "" },
-        { key: "arcIds", label: LX(c).milestones, type: "checks", value: [],
-          options: p.milestones.map(function (m) { return { value: m.id, label: m.label }; }),
-          empty: "No " + LX(c).milestones.toLowerCase() + " yet - add one first to link it." },
-        { key: "notes", label: "Notes (optional)", type: "textarea", value: "" }
-      ],
+      fields: taskFieldsFor(c, p, null),
       okLabel: "Add task",
       validate: validateTaskDates,
       onSubmit: function (v) {
@@ -1598,7 +1637,7 @@ function wireProjects() {
           p.tasks.push({
             id: uid(), title: v.title.trim(), type: v.type, status: v.status,
             assigneeId: assigneeId, started: v.started, due: v.due, arcIds: v.arcIds || [],
-            notes: v.notes.trim(), entries: []
+            attendance: v.attendance || [], notes: v.notes.trim(), entries: []
           });
           save();
           render();
@@ -1625,23 +1664,13 @@ function wireProjects() {
       if (!t) return;
       openModal({
         title: "Edit " + LX(c).task.toLowerCase(),
-        fields: [
-          { key: "title", label: LX(c).task, value: t.title },
-          { key: "type", label: LX(c).typeLabel, type: "select", options: LX(c).taskTypes, value: t.type },
-          { key: "status", label: "Status", type: "select", options: LX(c).taskStatuses, value: t.status },
-          { key: "assigneeId", label: "Assigned to", type: "select", options: memberOptions(c),
-            value: t.assigneeId },
-          { key: "started", label: LX(c).startedLabel, type: "date", value: t.started },
-          { key: "due", label: LX(c).dueLabel, type: "date", value: t.due },
-          { key: "arcIds", label: LX(c).milestones, type: "checks", value: t.arcIds || [],
-            options: p.milestones.map(function (m) { return { value: m.id, label: m.label }; }),
-            empty: "No " + LX(c).milestones.toLowerCase() + " yet - add one first to link it." },
-          { key: "notes", label: "Notes", type: "textarea", value: t.notes }
-        ],
+        fields: taskFieldsFor(c, p, t),
         validate: validateTaskDates,
         onSubmit: function (v) {
           t.title = v.title.trim(); t.type = v.type; t.status = v.status;
-          t.started = v.started; t.due = v.due; t.notes = v.notes.trim(); t.arcIds = v.arcIds || [];
+          t.started = v.started; t.due = v.due; t.notes = v.notes.trim();
+          t.arcIds = v.arcIds || [];
+          if (kindOf(c) === "campaign") t.attendance = v.attendance || [];
           function finish(assigneeId) {
             t.assigneeId = assigneeId;
             save();
@@ -2405,7 +2434,8 @@ function printSheetHTML(mode, iso, opts) {
         '<text x="29" y="32" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="29" fill="#2e3542">A</text>' +
         '<circle cx="54" cy="41" r="9.6" fill="#ffffff"/><circle cx="55" cy="41" r="7.1" fill="#2e3542"/>' +
       "</svg>" +
-      "<div><div class=\"pt1\">Time record — " + esc(c.name) + "</div>" +
+      "<div><div class=\"pt1\">" + (kindOf(c) === "campaign" ? "Play record" : "Time record") +
+      " — " + esc(c.name) + "</div>" +
       '<div class="pt2">' + esc(title) + "</div></div>" +
     "</div>" +
     '<div class="ptot">' +
@@ -2468,11 +2498,19 @@ function printSheetHTML(mode, iso, opts) {
       html += '<h3>' + fromISO(d).toLocaleDateString(undefined,
         { weekday: "long", day: "numeric", month: "long" }) +
         ' <span class="dtot">' + fmtDur(dayMs) + " · " + fmtHours(dayMs) + " h</span></h3>";
-      html += "<table><thead><tr><th>Task</th><th>Project</th><th>Type</th>" +
+      const camp = kindOf(c) === "campaign";
+      html += "<table><thead><tr><th>" + esc(LX(c).task) + "</th><th>" + esc(LX(c).project) + "</th><th>" +
+        esc(LX(c).typeLabel) + "</th>" +
+        (camp ? "<th>" + esc(LX(c).milestones) + "</th><th>Present</th>" : "") +
         "<th>Started</th><th>Stopped</th><th class=\"r\">Duration</th><th class=\"r\">Hours</th></tr></thead><tbody>";
       rows.forEach(function (r) {
         html += "<tr><td>" + esc(r.task.title) + "</td><td>" + esc(r.project.name) + "</td>" +
-          "<td>" + esc(r.task.type) + "</td><td>" + esc(r.start) + "</td><td>" + esc(r.end) + "</td>" +
+          "<td>" + esc(r.task.type) + "</td>" +
+          (camp
+            ? "<td>" + esc(arcNames(r.project, r.task).join(", ") || "—") + "</td>" +
+              "<td>" + esc(attendeeNames(c, r.task).join(", ") || "—") + "</td>"
+            : "") +
+          "<td>" + esc(r.start) + "</td><td>" + esc(r.end) + "</td>" +
           '<td class="r">' + fmtDur(r.ms) + '</td><td class="r">' + fmtHours(r.ms) + "</td></tr>";
       });
       html += "</tbody></table>";
@@ -2489,9 +2527,118 @@ function printSheetHTML(mode, iso, opts) {
   return html;
 }
 
+function arcNames(p, t) {
+  return (t.arcIds || []).map(function (id) {
+    const m = p.milestones.find(function (x) { return x.id === id; });
+    return m ? m.label : null;
+  }).filter(Boolean);
+}
+function attendeeNames(c, t) {
+  return (t.attendance || []).map(function (id) { return memberName(c, id); });
+}
+
+/**
+ * A campaign log: not an hour grid but a chronological record of play -
+ * the cast, then every session with its date, arcs, who was there and how
+ * long it ran.
+ */
+function campaignLogHTML(projectId, opts) {
+  const c = activeContainer();
+  const p = findProject(c.id, projectId);
+  if (!p) return '<div class="psheet day"><div class="phead">Campaign not found.</div></div>';
+
+  const sessions = p.tasks.slice().sort(function (a, b) {
+    return (a.due || "9999-99-99").localeCompare(b.due || "9999-99-99");
+  });
+  const played = sessions.filter(function (t) { return t.status === "Played"; });
+  let totalMs = 0;
+  sessions.forEach(function (t) { totalMs += taskTotalMs(t); });
+  const dates = played.map(function (t) { return t.due; }).filter(Boolean).sort();
+  const span = dates.length
+    ? new Date(dates[0] + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) +
+      " – " + new Date(dates[dates.length - 1] + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+    : "no sessions played yet";
+
+  let html = '<div class="psheet day">';
+  html += '<div class="phead">' +
+    '<div class="pbrand">' +
+      '<svg viewBox="0 0 64 64" class="plogo" aria-hidden="true">' +
+        '<circle cx="29" cy="32" r="24" fill="none" stroke="#2e3542" stroke-width="3.1"/>' +
+        '<circle cx="29" cy="32" r="19.4" fill="none" stroke="#2e3542" stroke-width="1.3"/>' +
+        '<text x="29" y="32" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-size="29" fill="#2e3542">A</text>' +
+        '<circle cx="54" cy="41" r="9.6" fill="#ffffff"/><circle cx="55" cy="41" r="7.1" fill="#2e3542"/>' +
+      "</svg>" +
+      '<div><div class="pt1">Campaign log — ' + esc(p.name) + "</div>" +
+      '<div class="pt2">' + esc([p.department, p.person ? "GM " + p.person : "", p.status]
+        .filter(Boolean).join("  ·  ")) + "</div></div>" +
+    "</div>" +
+    '<div class="ptot">' +
+      "<div><b>" + played.length + "</b><span>played</span></div>" +
+      "<div><b>" + fmtDur(totalMs) + "</b><span>at the table</span></div>" +
+    "</div></div>";
+
+  html += '<div class="pdet" style="flex:1">';
+  html += '<p style="font-size:10.5px;color:#4a5461;margin:0 0 10px">' + esc(span) +
+    (p.description ? " — " + esc(p.description) : "") + "</p>";
+
+  if (p.roster.length) {
+    html += "<h3>Cast</h3><table><thead><tr><th>Character</th><th>Archetype</th><th>Player</th>" +
+      "<th>State</th><th class=\"r\">Sessions attended</th></tr></thead><tbody>";
+    p.roster.forEach(function (r) {
+      const a = attendanceFor(c, r.memberId);
+      html += "<tr><td>" + esc(r.name) + "</td><td>" + esc(r.archetype || "—") + "</td>" +
+        "<td>" + esc(memberName(c, r.memberId)) + "</td><td>" + esc(r.state) + "</td>" +
+        '<td class="r">' + a.attended + " of " + a.played + "</td></tr>";
+    });
+    html += "</tbody></table>";
+  }
+
+  if (p.milestones.length) {
+    html += "<h3>Plot arcs</h3><table><thead><tr><th>Arc</th><th class=\"r\">Sessions</th>" +
+      "<th class=\"r\">Time</th><th>State</th></tr></thead><tbody>";
+    p.milestones.forEach(function (m) {
+      const linked = p.tasks.filter(function (t) { return (t.arcIds || []).indexOf(m.id) >= 0; });
+      let ms = 0;
+      linked.forEach(function (t) { ms += taskTotalMs(t); });
+      html += "<tr><td>" + esc(m.label) + '</td><td class="r">' + linked.length + "</td>" +
+        '<td class="r">' + fmtDur(ms) + "</td><td>" + (m.done ? "Resolved" : "Open") + "</td></tr>";
+    });
+    html += "</tbody></table>";
+  }
+
+  html += "<h3>Session log</h3>";
+  if (!sessions.length) {
+    html += "<p>No sessions recorded yet.</p>";
+  } else {
+    html += "<table><thead><tr><th>Date</th><th>Session</th><th>Activity</th><th>Status</th>" +
+      "<th>Plot arcs</th><th>Present</th><th class=\"r\">Time</th></tr></thead><tbody>";
+    sessions.forEach(function (t) {
+      html += "<tr><td>" + esc(t.due
+        ? new Date(t.due + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+        : "—") + "</td>" +
+        "<td>" + esc(t.title) + (t.notes ? '<div style="color:#6b7581">' + esc(t.notes) + "</div>" : "") + "</td>" +
+        "<td>" + esc(t.type) + "</td><td>" + esc(t.status) + "</td>" +
+        "<td>" + esc(arcNames(p, t).join(", ") || "—") + "</td>" +
+        "<td>" + esc(attendeeNames(c, t).join(", ") || "—") + "</td>" +
+        '<td class="r">' + fmtDur(taskTotalMs(t)) + "</td></tr>";
+    });
+    html += "</tbody></table>";
+  }
+
+  html += '<div class="pgrand">Total time at the table: <b>' + fmtDur(totalMs) + "</b> (" +
+    fmtHours(totalMs) + " hours) across " + played.length + " played session" +
+    (played.length === 1 ? "" : "s") + "</div>";
+  html += '<div class="pfoot"><span>' + esc(c.name) + " · generated " +
+    new Date().toLocaleString() + "</span><span>Aphelion Ledger</span></div>";
+  html += "</div></div>";
+  return html;
+}
+
 function doPrint(mode, iso, opts) {
   const root = document.getElementById("printRoot");
-  root.innerHTML = printSheetHTML(mode, iso, opts);
+  root.innerHTML = mode === "campaign"
+    ? campaignLogHTML(opts.projectId, opts)
+    : printSheetHTML(mode, iso, opts);
   // @page cannot be driven by a variable, so the rule is swapped per print.
   let pg = document.getElementById("pageRule");
   if (!pg) {
@@ -2506,21 +2653,44 @@ function doPrint(mode, iso, opts) {
 }
 
 function openPrintDialog() {
-  const ws = weekStartDate();
+  const c = activeContainer();
+  const campaign = kindOf(c) === "campaign";
+  const modes = [
+    { value: "day", label: "A single day (portrait)" },
+    { value: "week", label: "A whole week (landscape)" }
+  ];
+  if (campaign) modes.push({ value: "campaign", label: "A whole campaign log (portrait)" });
+
+  const fields = [
+    { key: "mode", label: "Cover", type: "select", value: campaign ? "campaign" : "week", options: modes },
+    { key: "date", label: "Day, or any day in the week", type: "date", value: isoOf(new Date()) }
+  ];
+  if (campaign) {
+    fields.push({
+      key: "projectId", label: "Which campaign (for a campaign log)", type: "select",
+      options: c.projects.map(function (p) { return { value: p.id, label: p.name }; }),
+      value: state.ui.projectId || (c.projects[0] && c.projects[0].id)
+    });
+  }
+  fields.push({ key: "details", label: "Include detailed data", type: "select", options: ["Yes", "No"], value: "Yes" });
+  fields.push({ key: "showPlanned", label: "Show planned blocks behind", type: "select", options: ["Yes", "No"], value: "Yes" });
+
   openModal({
-    title: "Export a time record",
+    title: campaign ? "Export a play record" : "Export a time record",
     intro: "Prints through your browser — choose “Save as PDF” in the print dialog to file it.",
-    fields: [
-      { key: "mode", label: "Cover", type: "select", value: "week",
-        options: [{ value: "day", label: "A single day (portrait)" }, { value: "week", label: "A whole week (landscape)" }] },
-      { key: "date", label: "Day, or any day in the week", type: "date", value: isoOf(new Date()) },
-      { key: "details", label: "Include detailed data", type: "select", options: ["Yes", "No"], value: "Yes" },
-      { key: "showPlanned", label: "Show planned blocks behind", type: "select", options: ["Yes", "No"], value: "Yes" }
-    ],
+    fields: fields,
     okLabel: "Print / Save as PDF",
-    validate: function (v) { return v.date ? null : "Pick a date."; },
+    validate: function (v) {
+      if (v.mode === "campaign" && !v.projectId) return "There is no campaign to log yet.";
+      if (v.mode !== "campaign" && !v.date) return "Pick a date.";
+      return null;
+    },
     onSubmit: function (v) {
-      doPrint(v.mode, v.date, { details: v.details === "Yes", showPlanned: v.showPlanned === "Yes" });
+      doPrint(v.mode, v.date, {
+        details: v.details === "Yes",
+        showPlanned: v.showPlanned === "Yes",
+        projectId: v.projectId
+      });
     }
   });
 }
@@ -2683,6 +2853,14 @@ function membersHTML() {
         "</div></td></tr>";
       if (lex.roster && state.ui.openPlayer === m.id) {
         row += '<tr><td colspan="5" style="background:var(--panel-2)">' +
+          (function () {
+            const a = attendanceFor(c, m.id);
+            return a.played
+              ? '<div class="small" style="margin-bottom:8px"><b>Attended ' + a.attended + " of " + a.played +
+                " played " + (a.played === 1 ? "session" : "sessions") + "</b>" +
+                '<span class="muted"> · ' + Math.round(a.attended / a.played * 100) + "%</span></div>"
+              : "";
+          })() +
           (chars.length
             ? '<div class="small muted" style="margin-bottom:6px"><b>Characters played by ' + esc(m.name) + "</b></div>" +
               chars.map(function (h) {

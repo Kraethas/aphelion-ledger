@@ -121,7 +121,19 @@ a name, an archetype (class, profession, or a short description), the player
 behind it, and a state: Active, Retired or Deceased.
 
 In the Players list, click any player to see every character they have played
-across your campaigns.
+across your campaigns, and how many sessions they turned up to.
+
+ATTENDANCE is recorded per session: tick who was at the table under "Who was
+there" when you add or edit one. The session row then shows how many were
+present. Attendance percentages count only sessions marked Played, since those
+are the ones that actually happened - a Scheduled session is not a no-show.
+
+A CAMPAIGN LOG is a third option under Export record, available in roleplay
+containers. It prints one campaign as a chronological record rather than an
+hour grid: the cast with each player's attendance, the plot arcs with the time
+logged against each, and every session with its date, activity, status, arcs,
+who was present and how long it ran. Save it as a PDF and you have a permanent
+record of the campaign.
 
 Switching a container between Work and Roleplay re-maps statuses and activity
 types by position, and switching back restores them. Names, notes, dates, arc
