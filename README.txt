@@ -1,6 +1,6 @@
-TIME TRACKER v1.0
-=================
-A portable, no-install project & task time tracker.
+APHELION TIME TRACKER
+=====================
+A portable, no-install project & task time tracker, in Aphelion colours.
 
 HOW TO RUN
 ----------
@@ -103,6 +103,8 @@ straight in Excel.
 
 SHARING IT
 ----------
-TimeTracker.html is one self-contained file with no dependencies. E-mail it,
+TimeTracker.html is one self-contained file with no dependencies. The Aphelion
+mark in the top-left is drawn as inline SVG rather than loaded from anywhere,
+so the app never reaches out to the network and works fully offline. E-mail it,
 zip it, or put it on GitHub. Whoever opens it gets an empty tracker of their
 own; your data stays in your browser and is never inside the file itself.

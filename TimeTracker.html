@@ -3,11 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Time Tracker</title>
+<title>Aphelion Time Tracker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%232E3542'/%3E%3Ccircle cx='29' cy='32' r='20' fill='none' stroke='%23D2A45B' stroke-width='2.8'/%3E%3Ccircle cx='29' cy='32' r='16.2' fill='none' stroke='%23D2A45B' stroke-width='1.1'/%3E%3Ctext x='29' y='42' text-anchor='middle' font-family='Georgia,serif' font-size='25' fill='%23D2A45B'%3EA%3C/text%3E%3Ccircle cx='50' cy='39' r='8.4' fill='%232E3542'/%3E%3Ccircle cx='51' cy='39' r='6.2' fill='%23D2A45B'/%3E%3C/svg%3E">
 <style>
 :root{
-  --bg:#f4f6f9; --panel:#ffffff; --panel-2:#fafbfd; --border:#dfe4ec;
-  --text:#1c2430; --muted:#6b7787; --accent:#2f6feb; --accent-soft:#e8f0fe;
+  /* Aphelion brand */
+  --brand:#d2a45b;          /* Aphelion gold - marks, fills, dark grounds */
+  --navy:#2e3542;           /* Aphelion navy - the masthead */
+  --navy-hi:#3b4353;
+  /* supporting: warm sand ground, deep ink, and a slate blue for "in progress" */
+  --bg:#f1eee7; --panel:#ffffff; --panel-2:#faf8f3; --border:#e4ded2;
+  --text:#23272f; --muted:#77716a;
+  --accent:#8a6520;         /* gold darkened enough to read as text on light */
+  --accent-soft:#f7efdf;
+  --info:#37687f; --info-soft:#e4eef3;
   --green:#1f9d55; --green-soft:#e6f6ec; --amber:#b06f00; --amber-soft:#fdf3e0;
   --red:#c8372d; --red-soft:#fdeceb; --purple:#6b40c4; --purple-soft:#efe9fb;
   --shadow:0 1px 2px rgba(20,30,50,.06),0 4px 14px rgba(20,30,50,.05);
@@ -15,8 +24,10 @@
 }
 @media (prefers-color-scheme: dark){
   :root{
-    --bg:#12161d; --panel:#1a1f28; --panel-2:#20262f; --border:#2c343f;
-    --text:#e6eaf0; --muted:#94a0b0; --accent:#5b93ff; --accent-soft:#1d2a44;
+    --brand:#d8ac66; --navy:#242a35; --navy-hi:#2f3746;
+    --bg:#161a21; --panel:#1d222b; --panel-2:#232935; --border:#2f3644;
+    --text:#e7e3db; --muted:#98a0ac; --accent:#ddb574; --accent-soft:#33291a;
+    --info:#6fa5be; --info-soft:#172a33;
     --green:#4ec27f; --green-soft:#16301f; --amber:#e0a34a; --amber-soft:#33270f;
     --red:#ef6a5e; --red-soft:#3a1d1a; --purple:#a58bee; --purple-soft:#26203a;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
@@ -35,12 +46,22 @@ a{color:var(--accent)}
 
 /* ---------- header ---------- */
 header{
-  background:var(--panel);border-bottom:1px solid var(--border);
-  padding:10px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-  position:sticky;top:0;z-index:20;
+  background:var(--navy);border-bottom:1px solid rgba(255,255,255,.09);
+  padding:9px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  position:sticky;top:0;z-index:20;color:#efebe3;
 }
-.brand{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap}
-.brand span{color:var(--accent)}
+.brand{display:flex;align-items:center;gap:9px;white-space:nowrap}
+.brand .logo{width:30px;height:30px;flex:none}
+.brand .name{font-weight:700;font-size:16px;letter-spacing:.4px;color:var(--brand)}
+.brand .prod{font-weight:500;font-size:13.5px;color:rgba(255,255,255,.6);letter-spacing:.2px}
+header .sep{background:rgba(255,255,255,.15)}
+header .tab{color:rgba(255,255,255,.66)}
+header .tab:hover{background:rgba(255,255,255,.08);color:#fff}
+header .tab.active{background:rgba(210,164,91,.18);color:var(--brand);font-weight:600}
+header .btn{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.17);color:#ede9e1;box-shadow:none}
+header .btn:hover{background:rgba(210,164,91,.14);border-color:var(--brand);color:var(--brand)}
+header .btn.ghost{background:transparent;border-color:transparent;color:rgba(255,255,255,.7)}
+header .btn.ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 .tab{
   background:transparent;border:1px solid transparent;padding:6px 12px;border-radius:99px;
@@ -57,8 +78,8 @@ header{
   padding:6px 11px;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow);
 }
 .btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.primary:hover{filter:brightness(1.08);color:#fff}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#2a3040;font-weight:600}
+.btn.primary:hover{filter:brightness(1.06);color:#2a3040}
 .btn.ghost{background:transparent;box-shadow:none;border-color:transparent;color:var(--muted)}
 .btn.ghost:hover{background:var(--panel-2);color:var(--text);border-color:var(--border)}
 .btn.danger:hover{border-color:var(--red);color:var(--red)}
@@ -108,7 +129,7 @@ main{flex:1 1 auto;overflow:auto;padding:16px;display:block}
 
 /* task statuses */
 .t-ns{background:var(--panel-2);color:var(--muted);border:1px solid var(--border)}
-.t-prog{background:var(--accent-soft);color:var(--accent)}
+.t-prog{background:var(--info-soft);color:var(--info)}
 .t-wait{background:var(--amber-soft);color:var(--amber)}
 .t-rev{background:var(--purple-soft);color:var(--purple)}
 .t-pause{background:var(--panel-2);color:var(--muted);border:1px dashed var(--border-strong,var(--muted))}
@@ -185,7 +206,18 @@ tr.duerow:hover{background:var(--accent-soft)}
 <body>
 
 <header>
-  <div class="brand">&#9201; Time <span>Tracker</span></div>
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 64 64" role="img" aria-label="Aphelion">
+      <circle cx="29" cy="32" r="24" fill="none" stroke="var(--brand)" stroke-width="3.1"/>
+      <circle cx="29" cy="32" r="19.4" fill="none" stroke="var(--brand)" stroke-width="1.3"/>
+      <text x="29" y="32" text-anchor="middle" dominant-baseline="central"
+            font-family="Georgia,'Times New Roman',serif" font-size="29" fill="var(--brand)">A</text>
+      <circle cx="54" cy="41" r="9.6" fill="var(--navy)"/>
+      <circle cx="55" cy="41" r="7.1" fill="var(--brand)"/>
+    </svg>
+    <span class="name">Aphelion</span>
+    <span class="prod">Time Tracker</span>
+  </div>
   <div class="sep"></div>
   <div class="tabs" id="containerTabs"></div>
   <button class="btn sm ghost" id="addContainerBtn" title="Add a new container">+ Container</button>
@@ -348,6 +380,7 @@ function load() {
   if (!raw) {
     state = defaultState();
     state.ui.containerId = state.containers[0].id;
+    normalise();   // a fresh install still needs its member lists seeding
     save();
     return;
   }
