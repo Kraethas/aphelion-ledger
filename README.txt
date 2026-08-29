@@ -88,6 +88,29 @@ task form - pick "+ Add someone new..." in the Assigned to dropdown.
 Renaming a member updates every task assigned to them. Removing a member asks
 first, and reassigns their tasks to Myself rather than losing them.
 
+PLANNER is a companion to the tracking, not a replacement for it. It shows a
+week at a time, with your open tasks in a panel on the right - overdue first,
+then today and anything without a due date, then by due date.
+
+Drag a task from the panel onto a day to block out time for it. Drag a block
+to move it (including to another day), or its bottom edge to resize it. Click
+a block to edit, remove, or start its timer. Click empty space to add a
+meeting or note that lives in your work calendar rather than in Ledger.
+
+IMPORTANT: planned time is never counted as tracked time. Blocking two hours
+does not log two hours - only timers and manual entries do that. The header
+shows planned against logged for the week, which is the point: you can see
+where your plan and your actual week parted company.
+
+Blocks belonging to your other containers appear greyed out and read-only, so
+you can see your whole day without mixing Work and Personal together.
+
+IMPORT .ICS reads a calendar file exported from Outlook or similar and turns
+its meetings into blocks, so you do not have to retype them. It reads the file
+straight from your disk - nothing is uploaded. Repeating meetings and all-day
+events are skipped for now, and it tells you how many it left out. Importing
+the same file twice will not create duplicates.
+
 REPORTS opens with WHAT'S DUE: counts of overdue tasks, tasks due today, due
 this week (through Sunday), and due in the next 14 days, followed by the tasks
 themselves grouped by how soon they are due. Only open tasks with a due date

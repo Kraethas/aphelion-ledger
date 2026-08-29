@@ -175,6 +175,56 @@ tr.running{background:var(--green-soft)}
 .due-over{color:var(--red);font-weight:600}
 .due-soon{color:var(--amber);font-weight:600}
 
+/* ---------- planner ---------- */
+.planwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start;max-width:1700px;margin:0 auto}
+@media (max-width:1150px){.planwrap{grid-template-columns:1fr}}
+.plannav{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.plannav .rng{font-weight:600;white-space:nowrap}
+.plangrid{display:grid;grid-template-columns:56px repeat(7,minmax(0,1fr))}
+.gutter{position:relative}
+.gutter .hr{position:absolute;right:7px;font-size:10.5px;color:var(--muted);transform:translateY(-7px)}
+.dayhead{padding:7px 4px;text-align:center;border-left:1px solid var(--border);border-bottom:1px solid var(--border)}
+.dayhead .dn{font-weight:600;font-size:12.5px}
+.dayhead .dd{color:var(--muted);font-size:11px}
+.dayhead.today .dn{color:var(--accent)}
+.dayhead.today{background:var(--accent-soft)}
+.plancol{position:relative;border-left:1px solid var(--border);background:var(--panel)}
+.plancol.today{background:var(--accent-soft)}
+.plancol .hline{position:absolute;left:0;right:0;border-top:1px solid var(--border);pointer-events:none}
+.plancol .hline.half{border-top-style:dotted;opacity:.55}
+.nowline{position:absolute;left:0;right:0;border-top:2px solid var(--red);pointer-events:none;z-index:5}
+.block{
+  position:absolute;border-radius:5px;padding:2px 5px;font-size:11.5px;line-height:1.25;
+  overflow:hidden;cursor:grab;background:var(--accent-soft);color:var(--text);
+  border-left:3px solid var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.12);
+}
+.block .bt{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.block .bs{color:var(--muted);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.block.event{border-left-color:var(--info);background:var(--info-soft)}
+.block.ghost{
+  border:1px dashed var(--border);border-left:3px solid var(--border);
+  background:var(--panel-2);color:var(--muted);opacity:.72;pointer-events:none;box-shadow:none;
+}
+.block.dragging{opacity:.9;cursor:grabbing;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.28)}
+.block .rz{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize}
+.planpanel .grp{
+  padding:7px 12px;background:var(--panel-2);border-bottom:1px solid var(--border);
+  font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:700;color:var(--muted);
+}
+.planpanel .grp.over{color:var(--red)}
+.planpanel .pt{padding:9px 12px;border-bottom:1px solid var(--border);cursor:grab;display:flex;flex-direction:column;gap:2px}
+.planpanel .pt:hover{background:var(--panel-2)}
+.planpanel .pt .pn{font-weight:600;font-size:13px}
+.planpanel .pt .pm{font-size:11.5px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.planpanel .list{max-height:calc(100vh - 260px);overflow:auto}
+.dragghost{
+  position:fixed;z-index:100;pointer-events:none;padding:5px 10px;border-radius:6px;
+  background:var(--brand);color:#2a3040;font-size:12px;font-weight:600;
+  box-shadow:0 8px 22px rgba(0,0,0,.3);max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.plansum{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12.5px}
+.plansum b{font-variant-numeric:tabular-nums}
+
 /* ---------- modal ---------- */
 #modalRoot{position:fixed;inset:0;background:rgba(10,15,25,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 #modalRoot.on{display:flex}
@@ -224,6 +274,7 @@ tr.duerow:hover{background:var(--accent-soft)}
   <div class="grow"></div>
   <div class="tabs">
     <button class="tab" data-view="projects">Projects</button>
+    <button class="tab" data-view="planner">Planner</button>
     <button class="tab" data-view="reports">Reports</button>
     <button class="tab" data-view="members">Members</button>
   </div>
@@ -232,6 +283,7 @@ tr.duerow:hover{background:var(--accent-soft)}
   <button class="btn sm" id="exportBtn">Backup</button>
   <button class="btn sm" id="importBtn">Restore</button>
   <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+  <input type="file" id="icsFile" accept=".ics,text/calendar" style="display:none">
 </header>
 
 <div id="runbar">
@@ -400,7 +452,7 @@ function normalise() {
     state.containers = defaultState().containers;
   }
   state.ui = state.ui || {};
-  state.ui.view = ["reports", "members"].indexOf(state.ui.view) >= 0 ? state.ui.view : "projects";
+  state.ui.view = ["reports", "members", "planner"].indexOf(state.ui.view) >= 0 ? state.ui.view : "projects";
   state.ui.range = state.ui.range || "all";
   state.containers.forEach(function (c) {
     c.id = c.id || uid();
@@ -408,6 +460,25 @@ function normalise() {
     c.projects = Array.isArray(c.projects) ? c.projects : [];
 
     // Every container has a member list, and it always starts with you.
+    // Planned blocks, keyed by date. Intent only - never time entries.
+    c.plan = (c.plan && typeof c.plan === "object") ? c.plan : {};
+    Object.keys(c.plan).forEach(function (iso) {
+      if (!Array.isArray(c.plan[iso]) || !c.plan[iso].length) { delete c.plan[iso]; return; }
+      c.plan[iso].forEach(function (b) {
+        b.id = b.id || uid();
+        b.kind = b.kind === "event" ? "event" : "task";
+        b.label = b.label || "";
+        b.note = b.note || "";
+        b.start = /^\d{1,2}:\d{2}$/.test(b.start) ? b.start : "09:00";
+        b.end = /^\d{1,2}:\d{2}$/.test(b.end) ? b.end : "10:00";
+      });
+      // drop blocks whose task has since been deleted
+      c.plan[iso] = c.plan[iso].filter(function (b) {
+        return b.kind === "event" || !!findTaskById(c, b.taskId);
+      });
+      if (!c.plan[iso].length) delete c.plan[iso];
+    });
+
     c.members = Array.isArray(c.members) ? c.members : [];
     c.members.forEach(function (m) {
       m.id = m.id || uid();
@@ -738,6 +809,9 @@ function render() {
   } else if (state.ui.view === "members") {
     view.innerHTML = membersHTML();
     wireMembers();
+  } else if (state.ui.view === "planner") {
+    view.innerHTML = plannerHTML();
+    wirePlanner();
   } else {
     view.innerHTML = projectsHTML();
     wireProjects();
@@ -1308,6 +1382,660 @@ function rangeBounds(key) {
 }
 
 /* =========================================================
+   Planner
+   -----------------------------------------------------------
+   A companion to the tracker, not a replacement for it. Planned
+   blocks record what you INTEND to do; they never become time
+   entries and never appear in the time reports.
+   ========================================================= */
+
+const PX_PER_HOUR = 44;
+const SNAP_MIN = 15;
+const DEFAULT_BLOCK_MIN = 60;
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/* The visible vertical window, widened when blocks fall outside office hours. */
+let planView = { loMin: 6 * 60, hiMin: 22 * 60 };
+let planDrag = null;
+
+function isoOf(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") +
+    "-" + String(d.getDate()).padStart(2, "0");
+}
+function fromISO(s) { return new Date(s + "T00:00:00"); }
+function toMin(t) {
+  const p = String(t || "00:00").split(":");
+  return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0);
+}
+function toHHMM(m) {
+  m = Math.max(0, Math.min(24 * 60, Math.round(m)));
+  return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+}
+function mondayOf(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+function addDays(d, n) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() + n);
+  return x;
+}
+function snapMin(m) { return Math.round(m / SNAP_MIN) * SNAP_MIN; }
+
+function planOf(c) {
+  if (!c.plan || typeof c.plan !== "object") c.plan = {};
+  return c.plan;
+}
+function blocksOn(c, iso) {
+  const p = planOf(c);
+  return Array.isArray(p[iso]) ? p[iso] : [];
+}
+function setDayBlocks(c, iso, arr) {
+  const p = planOf(c);
+  if (arr && arr.length) p[iso] = arr; else delete p[iso];
+}
+function findTaskById(c, taskId) {
+  for (let i = 0; i < c.projects.length; i++) {
+    const t = c.projects[i].tasks.find(function (x) { return x.id === taskId; });
+    if (t) return { project: c.projects[i], task: t };
+  }
+  return null;
+}
+function weekStartDate() {
+  return state.ui.weekStart ? fromISO(state.ui.weekStart) : mondayOf(new Date());
+}
+
+/** Title and sub-line for a block, resolved live so task renames follow. */
+function blockLabel(c, b) {
+  if (b.kind === "task") {
+    const hit = findTaskById(c, b.taskId);
+    if (!hit) return { title: "(task deleted)", sub: "", missing: true };
+    return { title: hit.task.title, sub: hit.project.name, missing: false };
+  }
+  return { title: b.label || "(untitled)", sub: b.note || "", missing: false };
+}
+
+/** Side-by-side columns for blocks that overlap in time. */
+function layoutBlocks(entries) {
+  const sorted = entries.slice().sort(function (a, b) {
+    return toMin(a.block.start) - toMin(b.block.start) || toMin(a.block.end) - toMin(b.block.end);
+  });
+  const out = [];
+  let group = [], colEnds = [], groupEnd = -1;
+  function flush() {
+    const total = colEnds.length || 1;
+    group.forEach(function (g) { g.total = total; out.push(g); });
+    group = []; colEnds = []; groupEnd = -1;
+  }
+  sorted.forEach(function (e) {
+    const s = toMin(e.block.start), en = toMin(e.block.end);
+    if (group.length && s >= groupEnd) flush();
+    let ci = colEnds.findIndex(function (end) { return s >= end; });
+    if (ci < 0) { ci = colEnds.length; colEnds.push(en); } else { colEnds[ci] = en; }
+    e.col = ci;
+    group.push(e);
+    groupEnd = Math.max(groupEnd, en);
+  });
+  if (group.length) flush();
+  return out;
+}
+
+/** Open tasks for the side panel: overdue, then today (undated included), then ahead. */
+function plannerPanelTasks(c) {
+  const today = startOfToday();
+  const endToday = today + 86400000 - 1;
+  const items = [];
+  c.projects.forEach(function (p) {
+    p.tasks.forEach(function (t) {
+      if (isTaskClosed(t)) return;
+      let bucket, key;
+      if (!t.due) {
+        bucket = 1; key = today;               // undated sits with today, as requested
+      } else {
+        const due = new Date(t.due + "T23:59:59").getTime();
+        if (due < today) { bucket = 0; key = due; }
+        else if (due <= endToday) { bucket = 1; key = due; }
+        else { bucket = 2; key = due; }
+      }
+      items.push({ project: p, task: t, bucket: bucket, key: key });
+    });
+  });
+  items.sort(function (a, b) {
+    return a.bucket - b.bucket || a.key - b.key || a.task.title.localeCompare(b.task.title);
+  });
+  return items;
+}
+
+/** Minutes logged in this container between two timestamps. */
+function loggedBetween(c, from, to) {
+  let ms = 0;
+  c.projects.forEach(function (p) {
+    p.tasks.forEach(function (t) {
+      const entries = t.entries.slice();
+      if (isRunningTask(t)) entries.push({ start: state.running.startedAt, end: now() });
+      entries.forEach(function (e) {
+        const s = Math.max(e.start, from), en = Math.min(e.end, to);
+        if (en > s) ms += en - s;
+      });
+    });
+  });
+  return ms;
+}
+
+function plannerHTML() {
+  const c = activeContainer();
+  const ws = weekStartDate();
+  const days = [];
+  for (let i = 0; i < 7; i++) days.push(addDays(ws, i));
+  const todayISO = isoOf(new Date());
+
+  // Gather everything visible this week: own blocks plus greyed ghosts from
+  // the other containers, so the day reads as your actual day.
+  const perDay = {};
+  let plannedMin = 0;
+  days.forEach(function (d) {
+    const iso = isoOf(d);
+    const list = [];
+    blocksOn(c, iso).forEach(function (b) {
+      list.push({ block: b, ghost: false, owner: c.name });
+      plannedMin += Math.max(0, toMin(b.end) - toMin(b.start));
+    });
+    state.containers.forEach(function (other) {
+      if (other.id === c.id) return;
+      blocksOn(other, iso).forEach(function (b) {
+        list.push({ block: b, ghost: true, owner: other.name, ownerC: other });
+      });
+    });
+    perDay[iso] = list;
+  });
+
+  // Widen the window if anything falls outside 06:00-22:00, so nothing hides.
+  let lo = 6 * 60, hi = 22 * 60;
+  Object.keys(perDay).forEach(function (iso) {
+    perDay[iso].forEach(function (e) {
+      lo = Math.min(lo, toMin(e.block.start));
+      hi = Math.max(hi, toMin(e.block.end));
+    });
+  });
+  planView = { loMin: Math.floor(lo / 60) * 60, hiMin: Math.ceil(hi / 60) * 60 };
+  const colH = (planView.hiMin - planView.loMin) / 60 * PX_PER_HOUR;
+
+  const weekFrom = ws.getTime();
+  const weekTo = addDays(ws, 7).getTime() - 1;
+  const loggedMs = loggedBetween(c, weekFrom, weekTo);
+
+  const rangeLabel = ws.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + " – " +
+    days[6].toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+  /* --- nav --- */
+  let html = '<div class="planwrap"><div>';
+  html += '<div class="card" style="margin-bottom:14px"><div class="body plannav">' +
+    '<button class="btn sm" data-week="-1">&lsaquo;</button>' +
+    '<button class="btn sm" data-week="0">This week</button>' +
+    '<button class="btn sm" data-week="1">&rsaquo;</button>' +
+    '<span class="rng">' + esc(rangeLabel) + "</span>" +
+    '<div class="grow" style="flex:1"></div>' +
+    '<div class="plansum"><span class="muted">Planned</span> <b>' + fmtDur(plannedMin * 60000) + "</b>" +
+      '<span class="muted">Logged</span> <b>' + fmtDur(loggedMs) + "</b></div>" +
+    '<button class="btn sm" id="icsBtn" title="Import meetings from an .ics file">Import .ics</button>' +
+    "</div></div>";
+
+  /* --- grid --- */
+  html += '<div class="card"><div style="overflow:auto">';
+  html += '<div class="plangrid" style="min-width:760px">';
+  html += "<div></div>";
+  days.forEach(function (d) {
+    const iso = isoOf(d);
+    html += '<div class="dayhead' + (iso === todayISO ? " today" : "") + '">' +
+      '<div class="dn">' + DAY_NAMES[(d.getDay() + 6) % 7] + "</div>" +
+      '<div class="dd">' + d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + "</div></div>";
+  });
+
+  // hour gutter
+  html += '<div class="gutter" style="height:' + colH + 'px">';
+  for (let m = planView.loMin; m <= planView.hiMin; m += 60) {
+    html += '<div class="hr" style="top:' + ((m - planView.loMin) / 60 * PX_PER_HOUR) + 'px">' + toHHMM(m) + "</div>";
+  }
+  html += "</div>";
+
+  days.forEach(function (d) {
+    const iso = isoOf(d);
+    html += '<div class="plancol' + (iso === todayISO ? " today" : "") +
+      '" data-iso="' + iso + '" style="height:' + colH + 'px">';
+    for (let m = planView.loMin; m <= planView.hiMin; m += 30) {
+      const y = (m - planView.loMin) / 60 * PX_PER_HOUR;
+      html += '<div class="hline' + (m % 60 ? " half" : "") + '" style="top:' + y + 'px"></div>';
+    }
+    if (iso === todayISO) {
+      const nd = new Date();
+      const nm = nd.getHours() * 60 + nd.getMinutes();
+      if (nm >= planView.loMin && nm <= planView.hiMin) {
+        html += '<div class="nowline" style="top:' + ((nm - planView.loMin) / 60 * PX_PER_HOUR) + 'px"></div>';
+      }
+    }
+    layoutBlocks(perDay[iso]).forEach(function (e) {
+      const b = e.block;
+      const top = (toMin(b.start) - planView.loMin) / 60 * PX_PER_HOUR;
+      const h = Math.max(15, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
+      const w = 100 / e.total;
+      const lab = blockLabel(e.ghost ? e.ownerC : c, b);
+      const sub = e.ghost ? e.owner : (lab.sub || "");
+      html += '<div class="block' + (b.kind === "event" ? " event" : "") + (e.ghost ? " ghost" : "") + '"' +
+        (e.ghost ? "" : ' data-block="' + b.id + '" data-day="' + iso + '"') +
+        ' style="top:' + top + "px;height:" + h + "px;left:calc(" + (e.col * w) + "% + 2px);width:calc(" + w + "% - 4px);\">" +
+        '<div class="bt">' + esc(lab.title) + "</div>" +
+        '<div class="bs">' + esc(b.start + "–" + b.end + (sub ? " · " + sub : "")) + "</div>" +
+        (e.ghost ? "" : '<div class="rz"></div>') +
+        "</div>";
+    });
+    html += "</div>";
+  });
+  html += "</div></div>";
+  html += '<div class="body"><span class="hint">Drag a task from the right onto a day to block time for it. ' +
+    "Click empty space to add a meeting or note. Drag a block to move it, or its bottom edge to resize. " +
+    "Greyed blocks belong to your other containers and are read-only. " +
+    "<b>Planned time is never counted as tracked time.</b></span></div>";
+  html += "</div></div>";
+
+  /* --- task panel --- */
+  const items = plannerPanelTasks(c);
+  const groups = [
+    { key: 0, label: "Overdue", cls: "over" },
+    { key: 1, label: "Today &amp; undated", cls: "" },
+    { key: 2, label: "Coming up", cls: "" }
+  ];
+  html += '<div class="card planpanel"><div class="head"><h3 style="flex:1">Tasks</h3>' +
+    '<span class="small muted">' + items.length + " open</span></div>";
+  if (!items.length) {
+    html += '<div class="planempty">No open tasks in ' + esc(c.name) + ".</div>";
+  } else {
+    html += '<div class="list">';
+    groups.forEach(function (g) {
+      const rows = items.filter(function (i) { return i.bucket === g.key; });
+      if (!rows.length) return;
+      html += '<div class="grp ' + g.cls + '">' + g.label + " · " + rows.length + "</div>";
+      rows.forEach(function (i) {
+        const due = i.task.due
+          ? new Date(i.task.due + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" })
+          : "no due date";
+        html += '<div class="pt" data-task="' + i.task.id + '">' +
+          '<div class="pn">' + esc(i.task.title) + "</div>" +
+          '<div class="pm"><span class="badge ' + TASK_STATUS_CLASS[i.task.status] + '">' + esc(i.task.status) + "</span>" +
+            "<span>" + esc(i.project.name) + "</span><span>·</span><span>" + esc(due) + "</span></div>" +
+          "</div>";
+      });
+    });
+    html += "</div>";
+  }
+  html += '<div class="body"><span class="hint">Overdue first, then today and anything undated, then by due date.</span></div>';
+  html += "</div></div>";
+  return html;
+}
+
+/* ---------- planner interaction ---------- */
+
+function planColRects() {
+  return Array.from(document.querySelectorAll(".plancol")).map(function (el) {
+    return { iso: el.getAttribute("data-iso"), rect: el.getBoundingClientRect(), el: el };
+  });
+}
+function colAt(cols, x, y) {
+  return cols.find(function (c) {
+    return x >= c.rect.left && x <= c.rect.right && y >= c.rect.top - 40 && y <= c.rect.bottom + 40;
+  }) || null;
+}
+function minsAt(rect, y) {
+  const m = planView.loMin + ((y - rect.top) / PX_PER_HOUR) * 60;
+  return Math.max(planView.loMin, Math.min(planView.hiMin, m));
+}
+
+function openBlockEditor(c, iso, b) {
+  const isTask = b.kind === "task";
+  const lab = blockLabel(c, b);
+  openModal({
+    title: isTask ? "Planned: " + lab.title : "Meeting or note",
+    fields: (isTask ? [] : [{ key: "label", label: "Title", value: b.label || "" }]).concat([
+      { key: "start", label: "From (HH:MM)", value: b.start },
+      { key: "end", label: "To (HH:MM)", value: b.end },
+      { key: "note", label: isTask ? "Note" : "Location / note", type: "textarea", value: b.note || "" }
+    ]),
+    okLabel: "Save",
+    validate: function (v) {
+      if (!isTask && !v.label.trim()) return "Give it a title.";
+      if (!/^\d{1,2}:\d{2}$/.test(v.start) || !/^\d{1,2}:\d{2}$/.test(v.end)) return "Times must look like 09:30.";
+      if (toMin(v.end) <= toMin(v.start)) return "The end time must be after the start time.";
+      return null;
+    },
+    onSubmit: function (v) {
+      if (!isTask) b.label = v.label.trim();
+      b.start = toHHMM(toMin(v.start));
+      b.end = toHHMM(toMin(v.end));
+      b.note = v.note.trim();
+      save();
+      render();
+    }
+  });
+
+  const foot = document.querySelector("#modalRoot .foot");
+  if (!foot) return;
+  const del = document.createElement("button");
+  del.className = "btn danger";
+  del.textContent = "Remove";
+  del.style.marginRight = "auto";
+  del.onclick = function () {
+    setDayBlocks(c, iso, blocksOn(c, iso).filter(function (x) { return x.id !== b.id; }));
+    save();
+    document.getElementById("modalRoot").classList.remove("on");
+    document.getElementById("modalRoot").innerHTML = "";
+    render();
+  };
+  foot.insertBefore(del, foot.firstChild);
+
+  if (isTask && !lab.missing) {
+    const go = document.createElement("button");
+    go.className = "btn go";
+    go.textContent = "Start timer";
+    go.onclick = function () {
+      const hit = findTaskById(c, b.taskId);
+      document.getElementById("modalRoot").classList.remove("on");
+      document.getElementById("modalRoot").innerHTML = "";
+      if (hit) startTimer(c.id, hit.project.id, hit.task.id);
+    };
+    foot.insertBefore(go, foot.lastChild);
+  }
+}
+
+function wirePlanner() {
+  const c = activeContainer();
+  const view = document.getElementById("view");
+
+  view.querySelectorAll("[data-week]").forEach(function (b) {
+    b.onclick = function () {
+      const dir = Number(b.getAttribute("data-week"));
+      state.ui.weekStart = isoOf(dir === 0 ? mondayOf(new Date()) : addDays(weekStartDate(), dir * 7));
+      save();
+      render();
+    };
+  });
+
+  const ics = document.getElementById("icsBtn");
+  if (ics) ics.onclick = function () { document.getElementById("icsFile").click(); };
+
+  function beginDrag(e, cfg) {
+    planDrag = Object.assign({
+      cols: planColRects(), startX: e.clientX, startY: e.clientY, moved: false
+    }, cfg);
+    document.addEventListener("pointermove", onDragMove);
+    document.addEventListener("pointerup", onDragEnd);
+  }
+
+  function onDragMove(e) {
+    if (!planDrag) return;
+    if (!planDrag.moved &&
+        Math.abs(e.clientX - planDrag.startX) < 4 && Math.abs(e.clientY - planDrag.startY) < 4) return;
+    planDrag.moved = true;
+
+    if (planDrag.mode === "new") {
+      let g = planDrag.ghostEl;
+      if (!g) {
+        g = document.createElement("div");
+        g.className = "dragghost";
+        g.textContent = planDrag.title;
+        document.body.appendChild(g);
+        planDrag.ghostEl = g;
+      }
+      g.style.left = (e.clientX + 12) + "px";
+      g.style.top = (e.clientY + 12) + "px";
+      return;
+    }
+
+    const el = planDrag.el;
+    if (planDrag.mode === "move") {
+      const hit = colAt(planDrag.cols, e.clientX, e.clientY);
+      const rect = (hit || planDrag.cols.find(function (x) { return x.iso === planDrag.iso; })).rect;
+      const mins = snapMin(minsAt(rect, e.clientY - planDrag.grabOffset));
+      const dur = planDrag.dur;
+      const top = (Math.min(mins, planView.hiMin - dur) - planView.loMin) / 60 * PX_PER_HOUR;
+      el.style.top = Math.max(0, top) + "px";
+      el.classList.add("dragging");
+      if (hit && hit.iso !== planDrag.overIso) {
+        planDrag.overIso = hit.iso;
+        hit.el.appendChild(el);
+        el.style.left = "2px";
+        el.style.width = "calc(100% - 4px)";
+      }
+    } else if (planDrag.mode === "resize") {
+      const rect = planDrag.cols.find(function (x) { return x.iso === planDrag.iso; }).rect;
+      const endMin = Math.max(planDrag.startMin + SNAP_MIN, snapMin(minsAt(rect, e.clientY)));
+      el.style.height = Math.max(15, (endMin - planDrag.startMin) / 60 * PX_PER_HOUR) + "px";
+      planDrag.newEnd = endMin;
+    }
+  }
+
+  function onDragEnd(e) {
+    document.removeEventListener("pointermove", onDragMove);
+    document.removeEventListener("pointerup", onDragEnd);
+    const d = planDrag;
+    planDrag = null;
+    if (!d) return;
+    if (d.ghostEl && d.ghostEl.parentNode) d.ghostEl.parentNode.removeChild(d.ghostEl);
+
+    if (d.mode === "new") {
+      if (!d.moved) return;
+      const hit = colAt(d.cols, e.clientX, e.clientY);
+      if (!hit) { render(); return; }
+      let startM = snapMin(minsAt(hit.rect, e.clientY));
+      startM = Math.min(startM, planView.hiMin - DEFAULT_BLOCK_MIN);
+      const list = blocksOn(c, hit.iso).slice();
+      list.push({
+        id: uid(), kind: "task", taskId: d.taskId, label: "",
+        start: toHHMM(startM), end: toHHMM(startM + DEFAULT_BLOCK_MIN), note: ""
+      });
+      setDayBlocks(c, hit.iso, list);
+      save();
+      render();
+      return;
+    }
+
+    const srcList = blocksOn(c, d.iso).slice();
+    const b = srcList.find(function (x) { return x.id === d.blockId; });
+    if (!b) { render(); return; }
+
+    if (!d.moved) {           // a click, not a drag
+      openBlockEditor(c, d.iso, b);
+      return;
+    }
+
+    if (d.mode === "resize") {
+      b.end = toHHMM(d.newEnd != null ? d.newEnd : toMin(b.end));
+      save();
+      render();
+      return;
+    }
+
+    // move, possibly to another day
+    const hit = colAt(d.cols, e.clientX, e.clientY);
+    const targetISO = hit ? hit.iso : d.iso;
+    const rect = (hit || d.cols.find(function (x) { return x.iso === d.iso; })).rect;
+    let startM = snapMin(minsAt(rect, e.clientY - d.grabOffset));
+    startM = Math.max(planView.loMin, Math.min(startM, planView.hiMin - d.dur));
+    b.start = toHHMM(startM);
+    b.end = toHHMM(startM + d.dur);
+    if (targetISO !== d.iso) {
+      setDayBlocks(c, d.iso, srcList.filter(function (x) { return x.id !== b.id; }));
+      const dst = blocksOn(c, targetISO).slice();
+      dst.push(b);
+      setDayBlocks(c, targetISO, dst);
+    } else {
+      setDayBlocks(c, d.iso, srcList);
+    }
+    save();
+    render();
+  }
+
+  // drag a task out of the panel
+  view.querySelectorAll("[data-task]").forEach(function (row) {
+    row.onpointerdown = function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      beginDrag(e, {
+        mode: "new",
+        taskId: row.getAttribute("data-task"),
+        title: row.querySelector(".pn").textContent
+      });
+    };
+  });
+
+  // move / resize / click an existing block
+  view.querySelectorAll("[data-block]").forEach(function (el) {
+    el.onpointerdown = function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const iso = el.getAttribute("data-day");
+      const id = el.getAttribute("data-block");
+      const b = blocksOn(c, iso).find(function (x) { return x.id === id; });
+      if (!b) return;
+      const resizing = e.target.classList.contains("rz");
+      beginDrag(e, {
+        mode: resizing ? "resize" : "move",
+        el: el, iso: iso, blockId: id,
+        dur: toMin(b.end) - toMin(b.start),
+        startMin: toMin(b.start),
+        grabOffset: e.clientY - el.getBoundingClientRect().top
+      });
+    };
+  });
+
+  // click empty space to add a meeting or note
+  view.querySelectorAll(".plancol").forEach(function (col) {
+    col.onpointerdown = function (e) {
+      if (e.button !== 0 || e.target.closest(".block")) return;
+      const iso = col.getAttribute("data-iso");
+      const startM = Math.min(snapMin(minsAt(col.getBoundingClientRect(), e.clientY)),
+        planView.hiMin - DEFAULT_BLOCK_MIN);
+      openModal({
+        title: "Add to " + fromISO(iso).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }),
+        intro: "For meetings and notes that live in your work calendar, not in Ledger.",
+        fields: [
+          { key: "label", label: "Title", value: "", placeholder: "e.g. Weekly ops call" },
+          { key: "start", label: "From (HH:MM)", value: toHHMM(startM) },
+          { key: "end", label: "To (HH:MM)", value: toHHMM(startM + DEFAULT_BLOCK_MIN) },
+          { key: "note", label: "Location / note (optional)", type: "textarea", value: "" }
+        ],
+        okLabel: "Add",
+        validate: function (v) {
+          if (!v.label.trim()) return "Give it a title.";
+          if (!/^\d{1,2}:\d{2}$/.test(v.start) || !/^\d{1,2}:\d{2}$/.test(v.end)) return "Times must look like 09:30.";
+          if (toMin(v.end) <= toMin(v.start)) return "The end time must be after the start time.";
+          return null;
+        },
+        onSubmit: function (v) {
+          const list = blocksOn(c, iso).slice();
+          list.push({
+            id: uid(), kind: "event", taskId: "", label: v.label.trim(),
+            start: toHHMM(toMin(v.start)), end: toHHMM(toMin(v.end)), note: v.note.trim()
+          });
+          setDayBlocks(c, iso, list);
+          save();
+          render();
+        }
+      });
+    };
+  });
+}
+
+/* ---------- .ics import ---------- */
+
+function icsUnescape(s) {
+  return String(s).replace(/\\n/gi, " ").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\");
+}
+
+function parseICSDate(raw) {
+  const m = String(raw).trim().match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
+  if (!m) return null;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  if (!m[4]) return { date: new Date(y, mo - 1, d), allDay: true };
+  const hh = +m[4], mi = +m[5], ss = +m[6];
+  // A trailing Z is UTC and converts to local time; anything else is read as
+  // local wall-clock, which is right for a single-timezone calendar.
+  const dt = m[7] === "Z" ? new Date(Date.UTC(y, mo - 1, d, hh, mi, ss)) : new Date(y, mo - 1, d, hh, mi, ss);
+  return { date: dt, allDay: false };
+}
+
+function parseICS(text) {
+  const unfolded = String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n[ \t]/g, "");
+  const events = [];
+  let cur = null, recurring = 0;
+  unfolded.split("\n").forEach(function (line) {
+    const trimmed = line.trim();
+    if (trimmed === "BEGIN:VEVENT") { cur = {}; return; }
+    if (trimmed === "END:VEVENT") {
+      if (cur) { if (cur.rrule) recurring++; else if (cur.start) events.push(cur); }
+      cur = null;
+      return;
+    }
+    if (!cur) return;
+    const idx = line.indexOf(":");
+    if (idx < 0) return;
+    const name = line.slice(0, idx).split(";")[0].trim().toUpperCase();
+    const val = line.slice(idx + 1);
+    if (name === "UID") cur.uid = val.trim();
+    else if (name === "SUMMARY") cur.summary = icsUnescape(val).trim();
+    else if (name === "LOCATION") cur.location = icsUnescape(val).trim();
+    else if (name === "RRULE") cur.rrule = true;
+    else if (name === "DTSTART") { const p = parseICSDate(val); if (p) { cur.start = p.date; cur.allDay = p.allDay; } }
+    else if (name === "DTEND") { const p = parseICSDate(val); if (p) cur.end = p.date; }
+  });
+  return { events: events, recurring: recurring };
+}
+
+function importICS(file) {
+  const c = activeContainer();
+  const reader = new FileReader();
+  reader.onload = function () {
+    let parsed;
+    try {
+      parsed = parseICS(String(reader.result));
+    } catch (e) {
+      alert("That file could not be read as a calendar.");
+      return;
+    }
+    if (!parsed.events.length && !parsed.recurring) {
+      alert("No events found in that file.");
+      return;
+    }
+    let added = 0, dupes = 0, allDay = 0;
+    parsed.events.forEach(function (ev) {
+      if (ev.allDay) { allDay++; return; }
+      const iso = isoOf(ev.start);
+      const startM = ev.start.getHours() * 60 + ev.start.getMinutes();
+      let endM = ev.end
+        ? (isoOf(ev.end) === iso ? ev.end.getHours() * 60 + ev.end.getMinutes() : 24 * 60)
+        : startM + 30;
+      if (endM <= startM) endM = startM + 30;
+      const list = blocksOn(c, iso).slice();
+      if (ev.uid && list.some(function (b) { return b.uid === ev.uid; })) { dupes++; return; }
+      list.push({
+        id: uid(), kind: "event", taskId: "", label: ev.summary || "(untitled meeting)",
+        start: toHHMM(startM), end: toHHMM(endM), note: ev.location || "", uid: ev.uid || ""
+      });
+      setDayBlocks(c, iso, list);
+      added++;
+    });
+    save();
+    render();
+    alert("Imported " + added + " meeting" + (added === 1 ? "" : "s") + " into " + c.name + "." +
+      (dupes ? "\n" + dupes + " already imported, skipped." : "") +
+      (allDay ? "\n" + allDay + " all-day event" + (allDay === 1 ? "" : "s") + " skipped." : "") +
+      (parsed.recurring ? "\n" + parsed.recurring + " repeating event" +
+        (parsed.recurring === 1 ? "" : "s") + " skipped - recurrence is not expanded yet." : ""));
+  };
+  reader.readAsText(file);
+}
+
+/* =========================================================
    Members
    ========================================================= */
 
@@ -1770,6 +2498,10 @@ function boot() {
   document.getElementById("importBtn").onclick = function () { document.getElementById("importFile").click(); };
   document.getElementById("importFile").onchange = function (e) {
     if (e.target.files && e.target.files[0]) importJSON(e.target.files[0]);
+    e.target.value = "";
+  };
+  document.getElementById("icsFile").onchange = function (e) {
+    if (e.target.files && e.target.files[0]) importICS(e.target.files[0]);
     e.target.value = "";
   };
   document.getElementById("runStop").onclick = function () { stopTimer(); };
