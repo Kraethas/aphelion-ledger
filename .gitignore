@@ -4,3 +4,7 @@ AphelionLedger*.zip
 # Local backups exported from the app
 aphelion-ledger-backup-*.json
 aphelion-ledger-report-*.csv
+
+# Local working data - backups, demo files, document folders
+Data/
+demo-tmp.json
