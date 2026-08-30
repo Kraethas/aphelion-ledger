@@ -1,10 +1,8 @@
 # Aphelion Ledger
 
-**Time tracking for locked-down laptops.** One HTML file. No install, no account, no network — nothing ever leaves your machine.
+**One HTML file that keeps an honest record of where your time and money went.** No install, no account, no network — nothing ever leaves your machine.
 
-If your work computer won't let you install software or sign into a cloud service, most time trackers are simply unavailable to you, and you end up in a spreadsheet. Aphelion Ledger is built for exactly that situation: download one file, double-click it, and start tracking.
-
-**It also runs tabletop RPG campaigns** — the same file, speaking a different language. There's a full section on that further down.
+It does two jobs with the same machinery. Set a container to **Work** and it tracks projects, tasks and invoices. Set it to **Roleplay** and it tracks campaigns, sessions, plot arcs and who was at the table. You can run both side by side.
 
 [**Download the latest release →**](https://github.com/Kraethas/aphelion-ledger/releases/latest)
 
@@ -12,62 +10,70 @@ If your work computer won't let you install software or sign into a cloud servic
 
 ---
 
-## Why it exists
+## Why it works this way
 
-Every good time tracker assumes it can install something or phone home. In regulated and locked-down environments — finance, healthcare, government, legal, defence — neither is allowed. Aphelion Ledger works within those constraints rather than around them:
+Every good tracker assumes it can install something or phone home. On a locked-down work laptop — finance, healthcare, government, legal, defence — neither is allowed, so people end up in a spreadsheet they resent. Aphelion Ledger is built to survive those constraints rather than route around them:
 
-- **No installer.** It's a single `.html` file. Double-click it.
-- **No account, no sign-up, no cloud.** There is nothing to sign into.
-- **No network access, ever.** The app makes zero outbound requests. Even the logo is drawn inline rather than loaded. It works with the Wi-Fi off, on a plane, or on an air-gapped machine.
+- **No installer.** A single `.html` file. Double-click it.
+- **No account, no cloud, no sync.** There is nothing to sign into.
+- **No network access, ever.** Zero outbound requests — even the logo is drawn in code rather than loaded. It works with the Wi-Fi off, on a plane, or on an air-gapped machine.
 - **No telemetry.** Nobody, including the author, can see your data.
-- **No admin rights required.**
+- **No admin rights.**
 
-## What it does
+The first time you open it, it asks what you're tracking and sets itself up accordingly. You can change that any time from the **⚙** button in the header.
 
-**Containers** keep separate worlds apart — Work, Personal, or anything you add. Each holds its own projects and its own people.
+## The shape of it
 
-**Projects** carry a person and department they're for, a status, a description, and milestones with due dates that flag amber in their final week and red once overdue.
+**Containers** are separate worlds — *Work*, *Personal*, *My Campaigns*. Each holds its own projects, its own people, its own planner and its own currency. Each is either a Work container or a Roleplay one.
 
-**Tasks** live inside projects and each has:
+**Projects** (*Campaigns*) hold the work. **Tasks** (*Sessions*) hold the doing. **Milestones** (*Plot arcs*) mark the shape of it.
 
-- Its own **start/stop timer**. Only one runs at a time, so time can't be double-counted, and a running timer survives closing the browser.
-- A **type of work** — meeting/call, development, presentation & e-mail prep, research, documentation, review/QA, planning, support, training, admin, travel.
-- A **status** — Not Started, In Progress, Waiting on Other Person/Team, In Review / Approval, Paused, Completed, Cancelled.
-- An **assignment** to someone from the container's member list, for tracking who's holding a task and where you're waiting on an answer.
-- A **start date and due date**, with the same amber/red flagging.
-- **Manual time entry** for work done away from the timer, and a per-task session log so you can delete a timer you left running overnight.
+## Tracking time
 
-**Cost and money.** Every task has an optional **Cost** (currency set per container, defaulting to €). Work projects can also keep **bills and balances** — a one-off bill you pay down, or a running balance that charges add to. Movements are ordinary tasks using two types, **Payment** and **Charge**, pointed at an account.
+Every task has its own **start/stop timer**. Only one runs at a time, so time can never be double-counted, and a running timer survives closing the browser — it keeps counting until you stop it.
 
-Two rules keep the numbers honest: outstanding balances are **derived from the payments, never stored**, so editing or deleting one corrects the balance immediately; and **Spent** and **Still owed** are separate figures that are never added together — spend is counted when money actually leaves, so a charge raises what you owe but isn't spend until you pay it.
+- A **type of work** on every task, so you can answer *where did the week actually go*.
+- A **status**: Not Started, In Progress, Waiting on Other Person/Team, In Review / Approval, Paused, Completed, Cancelled.
+- An **assignment** to someone from the container's member list — useful mainly for seeing who owes you an answer.
+- **Start and due dates**, which turn amber in their final week and red once overdue.
+- **Manual entry** for work done away from the timer, and a session log so you can delete the timer you left running overnight.
 
-**Every table filters.** Tasks, the cast, members, what's due and the report detail all carry a filter row under their headings — dropdowns for columns with a fixed set of values (listing only what's actually there), free text for names and titles. Filters stack, and a bar reads *Showing 8 of 16 · Clear filters* whenever anything is hidden, so a filtered list is never mistaken for missing data.
+## Tracking money
 
-**Members** are the people you can assign work to, kept per container. Name is required; team and e-mail are optional. Purely labels for your own tracking — nothing is shared and no e-mail is ever sent.
+Every task has an optional **Cost**. Leave it blank and money never appears; fill it in and it rolls into the project total, Reports, the CSV and the printed record. Currency is per container.
 
-**Reports** open with what's due: counts of overdue, due today, due this week, and due within 14 days, followed by the items themselves grouped by how soon they land. Below that, time logged by project, by type of work, and by department, over a period you choose — with **CSV export** that opens straight in Excel.
+Work projects can also keep **bills and balances** — a *one-off bill* you pay down to zero, or a *running balance* that new charges add to, like a card. Payments and charges are ordinary tasks using the **Payment** and **Charge** types, pointed at an account, so they carry dates, notes and documents like anything else.
 
-## Planner
+Two rules keep the numbers trustworthy:
 
-A weekly planner that sits alongside the tracker rather than replacing it.
+- **Balances are derived, never stored.** Outstanding is recalculated from the payments themselves, so editing or deleting one corrects the balance immediately and it can never drift.
+- **Spent and Still owed are never added together.** Spend is cash basis — counted when money actually leaves — so a charge raises what you owe but isn't spend until you pay it. The CSV marks every cost *counts as spend* yes or no, so the distinction survives into Excel.
 
-- **Week view**, Monday to Sunday, with a live marker on the current time.
-- **Drag a task onto a day** to block out time for it. Drag blocks to move them between days, or their bottom edge to resize. Everything snaps to 15 minutes.
-- **Click a block** to edit it, remove it, or start its timer.
-- **Import an `.ics`** exported from Outlook and its meetings become blocks — read straight from your disk, nothing uploaded. All-day and repeating events are skipped and reported rather than dropped silently.
-- **Other containers show through greyed out**, read-only and free to overlap, so a day reads as your whole day.
+## Planning the week
 
-**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. The one bridge is *Start timer* on a planned block. The header shows planned against logged for the week.
+The **Planner** is a companion to the tracking, not a replacement for it.
+
+- A **week view**, Monday to Sunday, with a live marker on the current time.
+- **Drag a task onto a day** to block out time. Drag blocks between days, or their bottom edge to resize. Everything snaps to 15 minutes.
+- **Click a block** to edit it, delete it, or start its timer.
+- **Import an `.ics`** from Outlook and its meetings become blocks, read straight off your disk. All-day and repeating events are skipped and counted for you rather than dropped silently.
+- Blocks from your **other containers** show through greyed out and read-only, so a day reads as your whole day without mixing the containers together.
+
+**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
+
+## Reports
+
+Reports open with **what's due** — overdue, today, this week, the next 14 days — then time by project, by type of work and by department for a period you choose, then **money**: spent in the period, still owed, and where it went.
+
+**CSV export** opens straight in Excel, with a separate costs block after the time rows.
 
 ## Printable records
 
-**Export record** produces a filing-quality PDF — for your own reference, or for showing someone.
+**Export record** produces something you can file or hand to someone: a **day in portrait** or a **week in landscape**, drawn as a timeline of the hours you actually logged, optionally with your plan behind it as dashed outlines, and an optional detail page itemising every session and cost.
 
-- A single **day in portrait**, or a whole **week in landscape**.
-- A graphical timeline drawing your **actual logged sessions** as solid blocks, with planned blocks optionally behind them as dashed outlines.
-- An optional **detail page** listing every session — task, project, type, started, stopped, duration, hours — with per-day and grand totals.
+Roleplay containers get a third option — a **campaign log**: the cast with each player's attendance, the plot arcs with time against each, and every session with its date, activity, who was present and how long it ran.
 
-It prints through your browser, so *Save as PDF* files it. Nothing leaves your machine.
+It prints through your browser, so *Save as PDF* files it.
 
 ## Documents
 
@@ -75,19 +81,23 @@ Point a project at a folder on your disk and attach files to the project, to any
 
 ```
 <your folder>/                      project-level documents
-<your folder>/Tasks/<task name>/    per task
-<your folder>/Milestones/<label>/   per milestone
+<your folder>/Tasks/<task name>/    per task      → Sessions/ in roleplay
+<your folder>/Milestones/<label>/   per milestone → Plot arcs/ in roleplay
 ```
 
-Your originals are never moved. A name clash is saved as `name (2).ext` rather than overwriting. Removing a document removes only Ledger's link — **your files are never deleted.**
+Your originals are never moved. A name clash saves as `name (2).ext` rather than overwriting. Removing a document removes only Ledger's link — **your files are never deleted.**
 
-> Documents need the File System Access API: **Chrome or Edge on the desktop**. It works from the file itself, no server needed. Firefox and Safari don't offer it, and the app says so plainly instead of half-working. Everything else works in any browser.
+> Documents need the File System Access API, which means **Chrome or Edge on the desktop**. It works from the file itself; no server needed. Firefox and Safari don't offer it, and the app says so plainly rather than half-working. Everything else works in any browser.
+
+## Filters
+
+Every data table — tasks, cast, members, what's due, report detail — has a filter row under its headings. Dropdowns for columns with a fixed set of values, listing only what's actually present so no choice is a dead end; free text for names and titles. Filters stack, and a bar reads *Showing 8 of 16 · Clear filters* whenever anything is hidden, so a filtered list is never mistaken for missing data.
 
 ---
 
-## It also runs campaigns
+## Roleplay mode
 
-Set a container to **Roleplay** instead of Work — when you create it, or later from its settings — and the whole vocabulary follows:
+Set a container to **Roleplay** and the vocabulary follows:
 
 | Work | Roleplay |
 | --- | --- |
@@ -99,16 +109,14 @@ Set a container to **Roleplay** instead of Work — when you create it, or later
 | Department | **System** |
 | Due date | **Session date** |
 
-Everything above still works — timers, planner, reports, printable records — it just speaks the right language.
+Everything above still works. What roleplay adds:
 
 - **Session statuses** — Scheduled, Confirmed, Awaiting Players, Prepped, Played, Postponed, Cancelled.
-- **Activities separate prep from play** — GM Prep, Worldbuilding, Maps & Assets, Rules Reading and Recap & Notes sit apart from Live Session, so Reports answers what a session actually costs you.
-- **Plot arcs link to sessions, many to many.** A session can belong to several arcs. Click an arc to see every session in it and the hours logged against it.
-- **A cast per campaign.** Characters belong to the campaign, not the player — so one person can play several characters, and be someone else entirely in your other campaign. Each is Active, Retired or **Deceased**. Click a player to see every character they've played.
-- **Attendance** per session, rolled up per player. Percentages count only sessions marked *Played*, so a scheduled session is never a no-show.
-- **A campaign log** — a third export option that prints one campaign as a chronological record: the cast with attendance, the arcs with time against each, and every session with its date, activity, arcs, who was present and how long it ran.
-- **Documents** file under `Sessions/` and `Plot arcs/` instead.
-- **Campaign cost** is an activity type for one-off spending — a VTT licence, a rulebook, dice. Campaigns get the Cost field but not accounts; a table's spending is one-off rather than a balance.
+- **Activities separate prep from play** — GM Prep, Worldbuilding, Maps & Assets, Rules Reading and Recap & Notes sit apart from Live Session, so Reports answers what a session really costs you.
+- **Plot arcs link to sessions, many to many.** Click an arc to see every session in it and the hours against it.
+- **A cast per campaign.** Characters belong to the campaign rather than the player, so one person can play several characters and be someone else entirely in your other campaign. Each is Active, Retired or **Deceased**. Click a player to see everyone they've played.
+- **Attendance** per session, rolled up per player and per campaign. Percentages count only sessions marked *Played*, so a scheduled session is never a no-show.
+- **Campaign cost** as an activity type, for a VTT licence or a rulebook. Campaigns get the Cost field but not accounts — a table's spending is one-off rather than a balance.
 
 Switching a container between modes re-maps statuses and activities by position, and switching back restores them. Names, notes, dates, arc links, cast and logged time are never touched.
 
@@ -116,18 +124,18 @@ Switching a container between modes re-maps statuses and activities by position,
 
 ## Your data
 
-Everything is stored in your browser's local storage, on your machine, tied to where the file sits. It survives closing the browser and rebooting. A chip in the header confirms saving is working, and warns you in red if a browser policy is blocking it.
+Everything lives in your browser's local storage, on your machine, tied to where the file sits. It survives closing the browser and rebooting. A chip in the header confirms saving works, and turns red if a browser policy is blocking it.
 
-Two things follow from that, and they're worth knowing up front:
+Two consequences worth knowing before you rely on it:
 
-- Move the file to a different folder or open it in a different browser and it starts empty. **Pick one home for it and keep it there.**
-- Clearing your browser's cookies and site data will erase it.
+- Move the file to a different folder, or open it in a different browser, and it starts empty. **Pick one home for it and keep it there.**
+- Clearing your browser's cookies and site data erases it.
 
-So use **Backup** — it writes a `.json` file with everything in it. **Restore** reads one back. That's also how you move to a new laptop.
+So use **Backup** — it writes a `.json` file with everything in it, and **Restore** reads one back. That's also how you move to a new laptop. Restore replaces everything, so back up first.
 
 ## Requirements
 
-Any current browser — Chrome, Edge, or Firefox. Nothing else. (Documents alone need Chrome or Edge, as noted above.)
+Any current browser — Chrome, Edge or Firefox. Documents alone need Chrome or Edge.
 
 ## Support it
 
@@ -135,7 +143,7 @@ Ledger is free and always will be. If it saves you a spreadsheet or earns a plac
 
 ## Contributing
 
-Issues and pull requests are welcome. It's deliberately a single file with no build step and no dependencies; please keep it that way.
+Issues and pull requests welcome. It is deliberately one file with no build step and no dependencies — please keep it that way.
 
 ## License
 

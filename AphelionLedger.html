@@ -378,6 +378,7 @@ tr.duerow:hover{background:var(--accent-soft)}
     <button class="tab" data-view="members">Members</button>
   </div>
   <div class="sep"></div>
+  <button class="btn sm ghost" id="setupBtn" title="Settings">&#9881;</button>
   <span class="badge" id="storeChip" title="Whether this browser is allowed to save your data locally"></span>
   <button class="btn sm" id="exportBtn">Backup</button>
   <button class="btn sm" id="importBtn">Restore</button>
@@ -694,6 +695,7 @@ function load() {
   if (!raw) {
     state = defaultState();
     state.ui.containerId = state.containers[0].id;
+    state.ui.needsSetup = true;   // ask what this is for, rather than assuming an office
     normalise();   // a fresh install still needs its member lists seeding
     save();
     return;
@@ -712,6 +714,7 @@ function normalise() {
     state.containers = defaultState().containers;
   }
   state.ui = state.ui || {};
+  settings();
   state.ui.view = ["reports", "members", "planner"].indexOf(state.ui.view) >= 0 ? state.ui.view : "projects";
   state.ui.range = state.ui.range || "all";
   state.containers.forEach(function (c) {
@@ -2102,6 +2105,90 @@ function rangeBounds(key) {
 
 
 
+
+
+/* =========================================================
+   Settings
+   -----------------------------------------------------------
+   Focus decides what the app assumes you are here for. It sets
+   what a fresh install starts with and what a new container
+   defaults to. It never hides or deletes anything you already
+   have - a work container stays a work container whatever the
+   focus says.
+   ========================================================= */
+
+const FOCUS_OPTIONS = [
+  { value: "work", label: "Work — projects, tasks, clients" },
+  { value: "campaign", label: "Roleplay — campaigns, sessions, players" },
+  { value: "both", label: "Both — keep them side by side" }
+];
+
+function settings() {
+  if (!state.settings || typeof state.settings !== "object") state.settings = {};
+  const st = state.settings;
+  if (["work", "campaign", "both"].indexOf(st.focus) < 0) st.focus = "both";
+  if (typeof st.currency !== "string" || !st.currency.trim()) st.currency = "\u20ac";
+  return st;
+}
+/** The kind a new container should start as. */
+function defaultKind() {
+  const f = settings().focus;
+  return f === "campaign" ? "campaign" : "work";
+}
+
+function openSettings() {
+  const st = settings();
+  openModal({
+    title: "Settings",
+    intro: "Focus sets what a new container starts as, and what a fresh install begins with. Nothing you already have is changed or hidden.",
+    fields: [
+      { key: "focus", label: "What are you tracking?", type: "select",
+        options: FOCUS_OPTIONS, value: st.focus },
+      { key: "currency", label: "Default currency for new containers",
+        value: st.currency, placeholder: "\u20ac" }
+    ],
+    okLabel: "Save",
+    onSubmit: function (v) {
+      st.focus = v.focus;
+      st.currency = v.currency.trim() || "\u20ac";
+      save();
+      render();
+    }
+  });
+}
+
+/** Shown once, on a genuinely empty install, so the app does not assume an office. */
+function openFirstRun() {
+  openModal({
+    title: "Welcome to Aphelion Ledger",
+    intro: "What are you going to track? This only decides what you start with — you can add either kind later, and change it in Settings.",
+    fields: [
+      { key: "focus", label: "I want to track", type: "select", options: FOCUS_OPTIONS, value: "work" },
+      { key: "currency", label: "Currency symbol", value: "\u20ac" }
+    ],
+    okLabel: "Get started",
+    onSubmit: function (v) {
+      const st = settings();
+      st.focus = v.focus;
+      st.currency = v.currency.trim() || "\u20ac";
+      const made = [];
+      if (v.focus === "work" || v.focus === "both") {
+        made.push({ id: uid(), name: "Work", kind: "work", currency: st.currency, projects: [], members: [], plan: {} });
+        made.push({ id: uid(), name: "Personal", kind: "work", currency: st.currency, projects: [], members: [], plan: {} });
+      }
+      if (v.focus === "campaign" || v.focus === "both") {
+        made.push({ id: uid(), name: "My Campaigns", kind: "campaign", currency: st.currency, projects: [], members: [], plan: {} });
+      }
+      state.containers = made;
+      state.ui.containerId = made[0].id;
+      state.ui.projectId = null;
+      delete state.ui.needsSetup;
+      normalise();
+      save();
+      render();
+    }
+  });
+}
 
 /* =========================================================
    Money
@@ -4219,12 +4306,13 @@ function boot() {
           options: [
             { value: "work", label: "Work — projects, tasks, departments" },
             { value: "campaign", label: "Roleplay — campaigns, sessions, players" }
-          ], value: "work" }
+          ], value: defaultKind() }
       ],
       okLabel: "Create",
       validate: function (v) { return v.name.trim() ? null : "Name is required."; },
       onSubmit: function (v) {
-        const c = { id: uid(), name: v.name.trim(), kind: v.kind, projects: [] };
+        const c = { id: uid(), name: v.name.trim(), kind: v.kind,
+          currency: settings().currency, projects: [] };
         state.containers.push(c);
         state.ui.containerId = c.id;
         state.ui.projectId = null;
@@ -4234,6 +4322,7 @@ function boot() {
     });
   };
 
+  document.getElementById("setupBtn").onclick = openSettings;
   document.getElementById("exportBtn").onclick = exportJSON;
   document.getElementById("importBtn").onclick = function () { document.getElementById("importFile").click(); };
   document.getElementById("importFile").onchange = function (e) {
@@ -4255,6 +4344,7 @@ function boot() {
   });
 
   render();
+  if (state.ui.needsSetup) openFirstRun();
   tickHandle = setInterval(tick, 1000);
 }
 
