@@ -256,6 +256,10 @@ tr.filters input::placeholder{color:var(--muted);opacity:.7}
 }
 .fnote b{font-variant-numeric:tabular-nums}
 td.nomatch{text-align:center;color:var(--muted);padding:22px 10px;font-size:13px}
+.owe{color:var(--amber)}
+.clear{color:var(--green)}
+.kpi.owing{background:var(--amber-soft);border-color:var(--amber)}
+.kpi.owing .v{color:var(--amber)}
 .docs{display:flex;flex-direction:column;gap:2px}
 .docrow{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px dashed var(--border);flex-wrap:wrap}
 .docrow:last-of-type{border-bottom:none}
@@ -424,7 +428,9 @@ const TASK_TYPES = [
   "Training & Learning",
   "Admin & Reporting",
   "Travel",
-  "Other"
+  "Other",
+  "Charge",
+  "Payment"
 ];
 
 const TASK_STATUSES = [
@@ -480,7 +486,8 @@ const SESSION_TYPES = [
   "Maps & Assets",
   "Downtime / Play-by-post",
   "Scheduling & Admin",
-  "Other"
+  "Other",
+  "Campaign cost"
 ];
 
 const CHAR_STATES = ["Active", "Retired", "Deceased"];
@@ -503,7 +510,7 @@ const LEX = {
     statuses: STATUSES, statusClass: STATUS_CLASS,
     taskStatuses: TASK_STATUSES, taskStatusClass: TASK_STATUS_CLASS,
     taskTypes: TASK_TYPES, defaultType: "Development Work",
-    roster: false
+    roster: false, accounts: true
   },
   campaign: {
     kindName: "Campaign", other: "work",
@@ -518,7 +525,7 @@ const LEX = {
     statuses: CAMPAIGN_STATUSES, statusClass: CAMPAIGN_STATUS_CLASS,
     taskStatuses: SESSION_STATUSES, taskStatusClass: SESSION_STATUS_CLASS,
     taskTypes: SESSION_TYPES, defaultType: "Live Session",
-    roster: true
+    roster: true, accounts: false
   }
 };
 
@@ -603,6 +610,16 @@ function taskFieldsFor(c, p, t) {
     { key: "arcIds", label: lex.milestones, type: "checks", value: t ? (t.arcIds || []) : [],
       options: arcOpts, empty: "No " + lex.milestones.toLowerCase() + " yet - add one first to link it." }
   ];
+  fields.push({ key: "cost", label: "Cost (" + containerCurrency(c) + ", optional)", type: "number",
+    value: t && t.cost ? t.cost : "", min: 0, step: "0.01" });
+  if (!campaign && (p.accounts || []).length) {
+    fields.push({
+      key: "accountId", label: "Against which bill or balance", type: "select",
+      options: [{ value: "", label: "\u2014 none \u2014" }].concat(
+        p.accounts.map(function (a) { return { value: a.id, label: a.name }; })),
+      value: t ? (t.accountId || "") : ""
+    });
+  }
   if (campaign) {
     fields.push({
       key: "attendance", label: "Who was there", type: "checks",
@@ -701,6 +718,7 @@ function normalise() {
     c.id = c.id || uid();
     c.name = c.name || "Untitled";
     c.kind = c.kind === "campaign" ? "campaign" : "work";
+    c.currency = (typeof c.currency === "string" && c.currency.trim()) ? c.currency.trim() : "€";
     const lex = LEX[c.kind];
     c.projects = Array.isArray(c.projects) ? c.projects : [];
 
@@ -751,6 +769,19 @@ function normalise() {
       p.milestones = Array.isArray(p.milestones) ? p.milestones : [];
       // Characters belong to a campaign, not to a player: one person can play
       // several characters here, and the same person elsewhere is someone else.
+      // Financial accounts are deliberately separate from milestones: a
+      // milestone is a checkpoint in the work, an account is a balance, and a
+      // payment belongs to exactly one account rather than many.
+      p.accounts = Array.isArray(p.accounts) ? p.accounts : [];
+      p.accounts.forEach(function (a) {
+        a.id = a.id || uid();
+        a.name = (a.name || "").trim() || "Untitled";
+        a.kind = ACCOUNT_KINDS.indexOf(a.kind) >= 0 ? a.kind : ACCOUNT_KINDS[0];
+        a.opening = Number(a.opening) || 0;
+        a.due = a.due || "";
+        a.note = a.note || "";
+        a.docs = Array.isArray(a.docs) ? a.docs : [];
+      });
       p.docs = Array.isArray(p.docs) ? p.docs : [];
       p.docFolder = p.docFolder || "";
       p.roster = Array.isArray(p.roster) ? p.roster : [];
@@ -810,6 +841,8 @@ function normalise() {
         t.started = t.started || "";
         t.due = t.due || "";
         // Who was at the table. Only meaningful for sessions, harmless otherwise.
+        t.cost = Number(t.cost) || 0;
+        t.accountId = (t.accountId && findAccount(p, t.accountId)) ? t.accountId : "";
         t.docs = Array.isArray(t.docs) ? t.docs : [];
         t.attendance = Array.isArray(t.attendance) ? t.attendance : [];
         t.attendance = t.attendance.filter(function (id) { return !!findMember(c, id); });
@@ -1152,12 +1185,14 @@ function containerMenu(id) {
         options: [
           { value: "work", label: "Work — projects, tasks, departments" },
           { value: "campaign", label: "Roleplay — campaigns, sessions, players" }
-        ], value: kindOf(c) }
+        ], value: kindOf(c) },
+      { key: "currency", label: "Currency symbol", value: containerCurrency(c) }
     ],
     okLabel: "Save",
     validate: function (v) { return v.name.trim() ? null : "Name cannot be empty."; },
     onSubmit: function (v) {
       c.name = v.name.trim();
+      c.currency = v.currency.trim() || "\u20ac";
       if (v.kind !== kindOf(c)) {
         const n = c.projects.length;
         if (n && !confirm("Switching this container to " + LEX[v.kind].kindName.toLowerCase() +
@@ -1273,6 +1308,12 @@ function projectDetailHTML(p) {
             esc(lex.tasks) + " (" + openTasks + " open)</div></div>" +
           '<div class="kpi"><div class="v mono">' + p.milestones.filter(function (m) { return !m.done; }).length +
             '</div><div class="k">Open ' + esc(lex.milestones.toLowerCase()) + "</div></div>" +
+          '<div class="kpi"><div class="v mono">' + money(projectSpent(p), activeContainer()) +
+            '</div><div class="k">Spent</div></div>' +
+          (lex.accounts && (p.accounts || []).length
+            ? '<div class="kpi' + (projectOutstanding(p) > 0 ? " owing" : "") + '"><div class="v mono">' +
+              money(projectOutstanding(p), activeContainer()) + '</div><div class="k">Still owed</div></div>'
+            : "") +
         "</div>" +
         '<div class="fields">' +
           '<label class="f">' + esc(lex.personLabel) + '<input type="text" data-field="person" value="' +
@@ -1302,6 +1343,70 @@ function projectDetailHTML(p) {
           : '<div class="hint">No ' + esc(lex.milestones.toLowerCase()) + " yet.</div>") +
       "</div>" +
     "</div>";
+
+  /* --- accounts (work containers only) --- */
+  if (lex.accounts) {
+    const cur = activeContainer();
+    html += '<div class="card" style="margin-bottom:16px">' +
+      '<div class="head"><h3 style="flex:1">Bills &amp; balances</h3>' +
+        '<button class="btn sm" data-act="newAccount">+ Account</button></div>' +
+      '<div class="body">';
+    if (!p.accounts.length) {
+      html += '<div class="hint">Nothing owed. Add a one-off bill or a running balance ' +
+        "and record payments against it as ordinary tasks.</div>";
+    } else {
+      html += '<div style="overflow:auto"><table><thead><tr>' +
+        "<th>Account</th><th>Kind</th><th class=\"right\">Opening</th><th class=\"right\">Paid</th>" +
+        "<th class=\"right\">Outstanding</th><th>Due</th><th class=\"right\">Actions</th>" +
+        "</tr></thead><tbody>" +
+        p.accounts.map(function (a) {
+          const out = accountOutstanding(p, a);
+          const moves = accountMovements(p, a.id);
+          const d = dueInfo(a.due, out <= 0);
+          let row = "<tr>" +
+            '<td><div class="ttitle arclbl" data-account="' + a.id + '">' + esc(a.name) +
+              '<span class="arccount">' + moves.length + "</span></div>" +
+              (a.note ? '<div class="small muted">' + esc(a.note) + "</div>" : "") + "</td>" +
+            '<td><span class="type-pill">' + esc(a.kind) + "</span></td>" +
+            '<td class="right mono">' + money(a.opening, cur) + "</td>" +
+            '<td class="right mono">' + money(accountPaid(p, a), cur) + "</td>" +
+            '<td class="right mono"><b class="' + (out > 0 ? "owe" : "clear") + '">' + money(out, cur) +
+              (out < 0 ? ' <span class="small">in credit</span>' : out === 0 ? ' <span class="small">settled</span>' : "") +
+              "</b></td>" +
+            '<td class="nowrap small ' + d.cls + '">' + esc(a.due ? d.text : "\u2014") + "</td>" +
+            '<td><div class="rowacts">' +
+              '<button class="btn sm ghost" data-edit-account="' + a.id + '">Edit</button>' +
+              '<button class="btn sm ghost danger" data-del-account="' + a.id + '">&times;</button>' +
+            "</div></td></tr>";
+          if (state.ui.openAccount === a.id) {
+            row += '<tr><td colspan="7" style="background:var(--panel-2)">' +
+              '<div class="small muted" style="margin-bottom:6px"><b>Movements on ' + esc(a.name) + "</b></div>" +
+              (moves.length
+                ? moves.slice().sort(function (x, y) { return (x.due || "").localeCompare(y.due || ""); })
+                    .map(function (t) {
+                      const charge = t.type === "Charge";
+                      return '<div class="arcrow">' +
+                        '<span class="badge ' + (charge ? "t-wait" : "t-done") + '">' + esc(t.type) + "</span>" +
+                        '<span class="an">' + esc(t.title) + "</span>" +
+                        '<span class="small muted">' + esc(t.due
+                          ? new Date(t.due + "T00:00:00").toLocaleDateString(undefined,
+                              { day: "numeric", month: "short", year: "numeric" })
+                          : "no date") + "</span>" +
+                        '<span class="small mono ' + (charge ? "owe" : "clear") + '">' +
+                          (charge ? "+" : "\u2212") + money(t.cost, cur).replace(/^-/, "") + "</span></div>";
+                    }).join("")
+                : '<span class="hint">No payments or charges recorded yet. Add a task with the type ' +
+                  "<b>Payment</b> or <b>Charge</b> and point it at this account.</span>") +
+              "</td></tr>";
+          }
+          return row;
+        }).join("") + "</tbody></table></div>";
+      html += '<div class="hint" style="margin-top:10px">Outstanding is worked out from the payments ' +
+        "themselves, never stored, so it cannot drift. <b>Spent</b> counts money that has actually left \u2014 " +
+        "a charge raises what you owe but is not spend until you pay it.</div>";
+    }
+    html += "</div></div>";
+  }
 
   /* --- documents --- */
   html += '<div class="card" style="margin-bottom:16px">' +
@@ -1379,7 +1484,10 @@ function projectDetailHTML(p) {
       { key: "status", label: "Status", type: "select", get: function (t) { return t.status; } },
       { key: "who", label: "Assigned to", type: "select",
         get: function (t) { return memberName(c0, t.assigneeId); } },
-      { label: "Dates" }, { label: "Time", right: true }, { label: "Actions", right: true }
+      { label: "Dates" },
+      { key: "cost", label: "Cost", type: "text", right: true,
+        get: function (t) { return t.cost ? String(t.cost) : ""; } },
+      { label: "Time", right: true }, { label: "Actions", right: true }
     ];
     const tshown = applyFilters("tasks", tcols, p.tasks);
     html += filterNoteHTML("tasks", tshown.length, p.tasks.length);
@@ -1387,7 +1495,7 @@ function projectDetailHTML(p) {
       tableHeadHTML("tasks", tcols, p.tasks) + "<tbody>" +
       (tshown.length
         ? tshown.map(function (t) { return taskRowHTML(p, t); }).join("")
-        : '<tr><td colspan="7" class="nomatch">Nothing matches these filters.</td></tr>') +
+        : '<tr><td colspan="8" class="nomatch">Nothing matches these filters.</td></tr>') +
       "</tbody></table></div>";
   }
   html += "</div>";
@@ -1500,6 +1608,9 @@ function taskRowHTML(p, t) {
         '<div><span>' + (kindOf(c) === "campaign" ? "Session" : "Due") + '</span> <b class="' + due.cls + '">' +
           esc(due.text) + "</b></div>" +
       "</div></td>" +
+      '<td class="right mono nowrap">' + (t.cost
+        ? '<span class="' + (t.type === "Charge" ? "owe" : "") + '">' + esc(money(t.cost, c)) + "</span>"
+        : '<span class="muted">\u2014</span>') + "</td>" +
       '<td class="right mono nowrap" data-live-task="' + t.id + '">' + fmtClock(taskTotalMs(t)) + "</td>" +
       '<td><div class="rowacts">' +
         (running
@@ -1512,7 +1623,7 @@ function taskRowHTML(p, t) {
     "</tr>";
 
   if (state.ui.openDocs === t.id) {
-    row += '<tr><td colspan="7" style="background:var(--panel-2)">' +
+    row += '<tr><td colspan="8" style="background:var(--panel-2)">' +
       '<div class="small muted" style="margin-bottom:6px"><b>Documents for ' + esc(t.title) + "</b></div>" +
       (docsSupported()
         ? docsHTML(t.docs, "task", t.id, "Nothing attached to this " + esc(LX(c).task.toLowerCase()) + " yet.")
@@ -1520,7 +1631,7 @@ function taskRowHTML(p, t) {
       "</td></tr>";
   }
   if (state.ui.openEntries === t.id) {
-    row += '<tr><td colspan="7" style="background:var(--panel-2)">' +
+    row += '<tr><td colspan="8" style="background:var(--panel-2)">' +
       '<div class="small muted" style="margin-bottom:6px"><b>Logged sessions</b> — delete any that were left running by mistake.</div>' +
       (entries.length
         ? entries.map(function (e) {
@@ -1669,6 +1780,72 @@ function wireProjects() {
     };
   });
 
+  /* accounts */
+  function accountModal(existing) {
+    openModal({
+      title: existing ? "Edit account" : "New bill or balance",
+      intro: existing ? null : "A one-off bill is paid down to zero. A running balance can also take new charges.",
+      fields: [
+        { key: "name", label: "Name", value: existing ? existing.name : "",
+          placeholder: "e.g. Adobe invoice 2291, or Visa card" },
+        { key: "kind", label: "Kind", type: "select", options: ACCOUNT_KINDS,
+          value: existing ? existing.kind : ACCOUNT_KINDS[0] },
+        { key: "opening", label: "Opening amount (" + containerCurrency(c) + ")", type: "number",
+          value: existing ? existing.opening : "", min: 0, step: "0.01" },
+        { key: "due", label: "Due date (optional)", type: "date", value: existing ? existing.due : "" },
+        { key: "note", label: "Note (optional)", type: "textarea", value: existing ? existing.note : "" }
+      ],
+      okLabel: existing ? "Save" : "Add account",
+      validate: function (v) {
+        if (!v.name.trim()) return "Give the account a name.";
+        if (v.opening === "" || isNaN(Number(v.opening))) return "Enter an opening amount.";
+        if (Number(v.opening) < 0) return "The opening amount cannot be negative.";
+        return null;
+      },
+      onSubmit: function (v) {
+        if (existing) {
+          existing.name = v.name.trim(); existing.kind = v.kind;
+          existing.opening = Number(v.opening); existing.due = v.due; existing.note = v.note.trim();
+        } else {
+          p.accounts.push({ id: uid(), name: v.name.trim(), kind: v.kind,
+            opening: Number(v.opening), due: v.due, note: v.note.trim(), docs: [] });
+        }
+        save();
+        render();
+      }
+    });
+  }
+
+  const newAcc = view.querySelector('[data-act="newAccount"]');
+  if (newAcc) newAcc.onclick = function () { accountModal(null); };
+  view.querySelectorAll("[data-edit-account]").forEach(function (b) {
+    b.onclick = function () {
+      const a = findAccount(p, b.getAttribute("data-edit-account"));
+      if (a) accountModal(a);
+    };
+  });
+  view.querySelectorAll("[data-del-account]").forEach(function (b) {
+    b.onclick = function () {
+      const a = findAccount(p, b.getAttribute("data-del-account"));
+      if (!a) return;
+      const n = accountMovements(p, a.id).length;
+      if (!confirm('Delete account "' + a.name + '"?' +
+        (n ? "\n\n" + n + " payment/charge task" + (n === 1 ? "" : "s") +
+             " will stay, but will no longer be linked to it." : ""))) return;
+      p.tasks.forEach(function (t) { if (t.accountId === a.id) t.accountId = ""; });
+      p.accounts = p.accounts.filter(function (x) { return x.id !== a.id; });
+      save();
+      render();
+    };
+  });
+  view.querySelectorAll("[data-account]").forEach(function (el) {
+    el.onclick = function () {
+      const id = el.getAttribute("data-account");
+      state.ui.openAccount = state.ui.openAccount === id ? null : id;
+      render();
+    };
+  });
+
   /* cast */
   function charModal(existing) {
     openModal({
@@ -1737,7 +1914,8 @@ function wireProjects() {
           p.tasks.push({
             id: uid(), title: v.title.trim(), type: v.type, status: v.status,
             assigneeId: assigneeId, started: v.started, due: v.due, arcIds: v.arcIds || [],
-            attendance: v.attendance || [], notes: v.notes.trim(), entries: []
+            attendance: v.attendance || [], cost: Number(v.cost) || 0,
+            accountId: v.accountId || "", notes: v.notes.trim(), entries: []
           });
           save();
           render();
@@ -1770,6 +1948,8 @@ function wireProjects() {
           t.title = v.title.trim(); t.type = v.type; t.status = v.status;
           t.started = v.started; t.due = v.due; t.notes = v.notes.trim();
           t.arcIds = v.arcIds || [];
+          t.cost = Number(v.cost) || 0;
+          if (kindOf(c) !== "campaign") t.accountId = v.accountId || "";
           if (kindOf(c) === "campaign") t.attendance = v.attendance || [];
           function finish(assigneeId) {
             t.assigneeId = assigneeId;
@@ -1921,6 +2101,89 @@ function rangeBounds(key) {
 }
 
 
+
+
+/* =========================================================
+   Money
+   -----------------------------------------------------------
+   Cash basis: a cost counts as SPENT when it is paid, so a
+   Charge (which only adds to what you owe) never counts as
+   spend. Account balances are always derived from the tasks
+   that move them - never stored - so editing or deleting a
+   payment can never leave a stale total behind.
+   ========================================================= */
+
+const ACCOUNT_KINDS = ["One-off bill", "Running balance"];
+
+function containerCurrency(c) {
+  return (c && c.currency) || "\u20ac";
+}
+function money(n, c) {
+  const v = Number(n) || 0;
+  const sign = v < 0 ? "-" : "";
+  return sign + containerCurrency(c) + Math.abs(v).toFixed(2);
+}
+/** Blank rather than a row of zeroes, so unused money stays quiet. */
+function moneyOrDash(n, c) {
+  return (Number(n) || 0) ? money(n, c) : "\u2014";
+}
+
+/** A charge raises what you owe; it is not money spent until it is paid. */
+function taskSpend(t) {
+  return t.type === "Charge" ? 0 : (Number(t.cost) || 0);
+}
+function projectSpent(p) {
+  return p.tasks.reduce(function (sum, t) { return sum + taskSpend(t); }, 0);
+}
+
+function accountOutstanding(p, acc) {
+  let out = Number(acc.opening) || 0;
+  p.tasks.forEach(function (t) {
+    if (t.accountId !== acc.id) return;
+    const amt = Number(t.cost) || 0;
+    if (t.type === "Charge") out += amt; else out -= amt;
+  });
+  return out;
+}
+function accountPaid(p, acc) {
+  let paid = 0;
+  p.tasks.forEach(function (t) {
+    if (t.accountId === acc.id && t.type !== "Charge") paid += Number(t.cost) || 0;
+  });
+  return paid;
+}
+function accountMovements(p, accId) {
+  return p.tasks.filter(function (t) { return t.accountId === accId; });
+}
+function projectOutstanding(p) {
+  return (p.accounts || []).reduce(function (sum, a) { return sum + accountOutstanding(p, a); }, 0);
+}
+function findAccount(p, id) {
+  return (p.accounts || []).find(function (a) { return a.id === id; }) || null;
+}
+
+/**
+ * Spend in a period, dated by the task's own date. Undated costs are never
+ * silently dropped: they are reported separately unless the range is All time.
+ */
+function spendIn(c, bounds, allTime) {
+  const rows = [];
+  let undated = 0;
+  (c && c.projects || []).forEach(function (p) {
+    p.tasks.forEach(function (t) {
+      const amt = taskSpend(t);
+      if (!amt) return;
+      if (!t.due) {
+        if (allTime) rows.push({ project: p, task: t, amt: amt });
+        else undated += amt;
+        return;
+      }
+      const ts = new Date(t.due + "T12:00:00").getTime();
+      if (ts >= bounds[0] && ts <= bounds[1]) rows.push({ project: p, task: t, amt: amt });
+    });
+  });
+  return { rows: rows, undated: undated };
+}
 
 /* =========================================================
    Table filters
@@ -3022,7 +3285,31 @@ function printSheetHTML(mode, iso, opts) {
     if (!days.some(function (d) { return actual[d].length; })) {
       html += "<p>No time was logged in this period.</p>";
     }
-    html += '<div class="pgrand">Total logged: <b>' + fmtDur(grandMs) + "</b> (" + fmtHours(grandMs) + " hours)</div>";
+    const cSpent = days.reduce(function (n, d) {
+      return n + c.projects.reduce(function (m, pr) {
+        return m + pr.tasks.reduce(function (k, t) {
+          return k + (t.due === d ? taskSpend(t) : 0);
+        }, 0);
+      }, 0);
+    }, 0);
+    if (cSpent) {
+      html += "<h3>Costs</h3><table><thead><tr><th>Date</th><th>" + esc(LX(c).task) + "</th><th>" +
+        esc(LX(c).project) + "</th><th>Type</th><th class=\"r\">Amount</th></tr></thead><tbody>";
+      days.forEach(function (d) {
+        c.projects.forEach(function (pr) {
+          pr.tasks.forEach(function (t) {
+            if (t.due !== d || !taskSpend(t)) return;
+            html += "<tr><td>" + esc(new Date(d + "T00:00:00").toLocaleDateString(undefined,
+              { day: "numeric", month: "short" })) + "</td><td>" + esc(t.title) + "</td>" +
+              "<td>" + esc(pr.name) + "</td><td>" + esc(t.type) + "</td>" +
+              '<td class="r">' + esc(money(t.cost, c)) + "</td></tr>";
+          });
+        });
+      });
+      html += "</tbody></table>";
+    }
+    html += '<div class="pgrand">Total logged: <b>' + fmtDur(grandMs) + "</b> (" + fmtHours(grandMs) + " hours)" +
+      (cSpent ? " &nbsp;·&nbsp; Spent: <b>" + esc(money(cSpent, c)) + "</b>" : "") + "</div>";
     html += '<div class="pfoot"><span>' + esc(c.name) + " · generated " +
       new Date().toLocaleString() + "</span><span>Aphelion Ledger</span></div></div>";
   }
@@ -3626,6 +3913,86 @@ function barTableHTML(pairs, total) {
   }).join("") + "</tbody></table>";
 }
 
+
+/** Money in Reports: what was spent in the period, and what is still owed. */
+function moneySectionHTML(c, bounds) {
+  const allTime = state.ui.range === "all";
+  const sp = spendIn(c, bounds, allTime);
+  const spent = sp.rows.reduce(function (n, r) { return n + r.amt; }, 0);
+  const owed = (c.projects || []).reduce(function (n, p) { return n + projectOutstanding(p); }, 0);
+  const openAccounts = [];
+  (c.projects || []).forEach(function (p) {
+    (p.accounts || []).forEach(function (a) {
+      const out = accountOutstanding(p, a);
+      if (out > 0) openAccounts.push({ project: p, account: a, out: out });
+    });
+  });
+
+  if (!spent && !owed && !sp.undated) return "";
+
+  let html = '<div class="card" style="margin-top:16px">' +
+    '<div class="head"><h3 style="flex:1">Money</h3>' +
+      '<span class="small muted">spend is counted when it is paid</span></div>' +
+    '<div class="body">' +
+      '<div class="kpis" style="margin-bottom:14px">' +
+        '<div class="kpi"><div class="v mono">' + money(spent, c) + '</div><div class="k">Spent' +
+          (allTime ? "" : " this period") + "</div></div>" +
+        (LX(c).accounts
+          ? '<div class="kpi' + (owed > 0 ? " owing" : "") + '"><div class="v mono">' + money(owed, c) +
+            '</div><div class="k">Still owed</div></div>'
+          : "") +
+        '<div class="kpi"><div class="v mono">' + sp.rows.length + '</div><div class="k">Costs recorded</div></div>' +
+      "</div>";
+  if (sp.undated) {
+    html += '<div class="hint" style="margin-bottom:12px">A further <b>' + money(sp.undated, c) +
+      "</b> is recorded on " + esc(LX(c).tasks.toLowerCase()) +
+      " with no date, so it cannot be placed in a period. Switch the range to <b>All time</b> to include it.</div>";
+  }
+  html += "</div>";
+
+  if (spent) {
+    const byProject = [];
+    const byType = [];
+    const map1 = new Map(), map2 = new Map();
+    sp.rows.forEach(function (r) {
+      map1.set(r.project.name, (map1.get(r.project.name) || 0) + r.amt);
+      map2.set(r.task.type, (map2.get(r.task.type) || 0) + r.amt);
+    });
+    Array.from(map1.entries()).sort(function (a, b) { return b[1] - a[1]; }).forEach(function (e) { byProject.push(e); });
+    Array.from(map2.entries()).sort(function (a, b) { return b[1] - a[1]; }).forEach(function (e) { byType.push(e); });
+
+    function bars(pairs) {
+      return '<table><tbody>' + pairs.map(function (pair) {
+        const pct = spent ? (pair[1] / spent) * 100 : 0;
+        return "<tr><td style=\"width:38%\">" + esc(pair[0]) + "</td>" +
+          '<td><div class="bartrack"><div class="bar" style="width:' + pct.toFixed(1) + '%"></div></div></td>' +
+          '<td class="right mono nowrap" style="width:110px">' + money(pair[1], c) + "</td>" +
+          '<td class="right mono muted nowrap" style="width:60px">' + pct.toFixed(0) + "%</td></tr>";
+      }).join("") + "</tbody></table>";
+    }
+    html += '<div class="wrap" style="grid-template-columns:1fr 1fr;margin-top:0">' +
+      '<div class="card"><div class="head"><h3>Spend by ' + esc(LX(c).project.toLowerCase()) +
+        '</h3></div><div class="body">' + bars(byProject) + "</div></div>" +
+      '<div class="card"><div class="head"><h3>Spend by ' + esc(LX(c).typeLabel.toLowerCase()) +
+        '</h3></div><div class="body">' + bars(byType) + "</div></div></div>";
+  }
+
+  if (openAccounts.length) {
+    html += '<div style="overflow:auto"><table><thead><tr><th>Account</th><th>' + esc(LX(c).project) +
+      "</th><th>Kind</th><th>Due</th><th class=\"right\">Paid</th><th class=\"right\">Outstanding</th>" +
+      "</tr></thead><tbody>" +
+      openAccounts.sort(function (a, b) { return b.out - a.out; }).map(function (o) {
+        const d = dueInfo(o.account.due, false);
+        return "<tr><td>" + esc(o.account.name) + "</td><td>" + esc(o.project.name) + "</td>" +
+          '<td><span class="type-pill">' + esc(o.account.kind) + "</span></td>" +
+          '<td class="small nowrap ' + d.cls + '">' + esc(o.account.due ? d.text : "\u2014") + "</td>" +
+          '<td class="right mono">' + money(accountPaid(o.project, o.account), c) + "</td>" +
+          '<td class="right mono"><b class="owe">' + money(o.out, c) + "</b></td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+  return html + "</div>";
+}
+
 function reportsHTML() {
   const c = activeContainer();
   const rows = collectRows();
@@ -3660,6 +4027,8 @@ function reportsHTML() {
   html += '<div class="card"><div class="head"><h3>By ' + esc(LX(c).typeLabel.toLowerCase()) + "</h3></div><div class=\"body\">" +
     barTableHTML(groupSum(rows, function (r) { return r.task.type; }), total) + "</div></div>";
   html += "</div>";
+
+  html += moneySectionHTML(c, rangeBounds(state.ui.range));
 
   html += '<div class="card" style="margin-top:16px"><div class="head"><h3>By ' + esc(LX(c).deptLabel.toLowerCase()) + "</h3></div><div class=\"body\">" +
     barTableHTML(groupSum(rows, function (r) { return r.project.department || "(unassigned)"; }), total) + "</div></div>";
@@ -3764,6 +4133,28 @@ function exportCSV() {
   });
   const total = rows.reduce(function (s, r) { return s + r.ms; }, 0);
   lines.push(["", "", "", "", "", "", "", "", "", "", "", "", "TOTAL", fmtDur(total), fmtHours(total)].map(csvCell).join(","));
+
+  // Costs live on tasks rather than on time entries - a paid invoice may have
+  // no logged time at all - so they get their own block rather than a column
+  // that would repeat itself once per session.
+  const costRows = [];
+  c.projects.forEach(function (p) {
+    p.tasks.forEach(function (t) {
+      if (!Number(t.cost)) return;
+      const acc = t.accountId ? findAccount(p, t.accountId) : null;
+      costRows.push([p.name, t.title, t.type, t.due, acc ? acc.name : "",
+        (Number(t.cost) || 0).toFixed(2), taskSpend(t) ? "yes" : "no"]);
+    });
+  });
+  if (costRows.length) {
+    const spent = costRows.reduce(function (n, r) { return n + (r[6] === "yes" ? Number(r[5]) : 0); }, 0);
+    lines.push("");
+    lines.push(["COSTS (" + containerCurrency(c) + ")"].map(csvCell).join(","));
+    lines.push([LX(c).project, LX(c).task, "Type", "Date", "Account", "Amount", "Counts as spend"]
+      .map(csvCell).join(","));
+    costRows.forEach(function (r) { lines.push(r.map(csvCell).join(",")); });
+    lines.push(["", "", "", "", "TOTAL SPENT", spent.toFixed(2), ""].map(csvCell).join(","));
+  }
   download("aphelion-ledger-report-" + c.name.replace(/[^\w-]+/g, "_") + "-" + stamp() + ".csv", lines.join("\r\n"), "text/csv;charset=utf-8");
 }
 

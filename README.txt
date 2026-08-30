@@ -210,6 +210,43 @@ straight from your disk - nothing is uploaded. Repeating meetings and all-day
 events are skipped for now, and it tells you how many it left out. Importing
 the same file twice will not create duplicates.
 
+COST AND MONEY
+--------------
+Every task and session has an optional COST. Leave it blank and nothing about
+money appears; fill it in and it rolls up into the project's Spent figure, the
+Reports money section, the CSV and the printable record. The currency symbol is
+set per container in its settings and defaults to EUR.
+
+Work containers can also keep BILLS AND BALANCES - a card of accounts, separate
+from milestones because a milestone is a checkpoint in the work while an
+account is a balance:
+
+  One-off bill     an amount owed that you pay down to zero
+  Running balance  a balance that new charges add to, like a credit card
+
+You record movements against an account as ordinary tasks, using two task
+types: PAYMENT reduces what you owe, CHARGE increases it. Point the task at the
+account with the "Against which bill or balance" field. Click an account name
+to see every movement on it.
+
+Two rules worth knowing, because they keep the numbers honest:
+
+  * Outstanding is always worked out from the payments themselves and never
+    stored, so editing or deleting a payment corrects the balance immediately
+    and it can never drift out of step.
+  * SPENT and STILL OWED are deliberately separate figures and are never added
+    together. Spend is counted when money actually leaves, so a CHARGE raises
+    what you owe but is not spend until you pay it. The CSV marks each cost
+    "counts as spend" yes or no so this is visible in the export too.
+
+Costs are dated by the task's own date, so the Reports money section respects
+the period you pick. Anything with a cost but no date is reported separately
+rather than silently dropped.
+
+ROLEPLAY containers get the Cost field and a "Campaign cost" activity type for
+one-off spending such as a VTT licence or a rulebook, but no accounts - a
+table's spending is one-off rather than a balance.
+
 FILTERS sit under the headings of every table - tasks/sessions, the cast,
 players, what's due, and the report detail. Columns with a fixed set of values
 (type, status, assigned to, state, system) give you a dropdown listing only the

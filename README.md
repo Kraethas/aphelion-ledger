@@ -37,6 +37,10 @@ Every good time tracker assumes it can install something or phone home. In regul
 - A **start date and due date**, with the same amber/red flagging.
 - **Manual time entry** for work done away from the timer, and a per-task session log so you can delete a timer you left running overnight.
 
+**Cost and money.** Every task has an optional **Cost** (currency set per container, defaulting to €). Work projects can also keep **bills and balances** — a one-off bill you pay down, or a running balance that charges add to. Movements are ordinary tasks using two types, **Payment** and **Charge**, pointed at an account.
+
+Two rules keep the numbers honest: outstanding balances are **derived from the payments, never stored**, so editing or deleting one corrects the balance immediately; and **Spent** and **Still owed** are separate figures that are never added together — spend is counted when money actually leaves, so a charge raises what you owe but isn't spend until you pay it.
+
 **Every table filters.** Tasks, the cast, members, what's due and the report detail all carry a filter row under their headings — dropdowns for columns with a fixed set of values (listing only what's actually there), free text for names and titles. Filters stack, and a bar reads *Showing 8 of 16 · Clear filters* whenever anything is hidden, so a filtered list is never mistaken for missing data.
 
 **Members** are the people you can assign work to, kept per container. Name is required; team and e-mail are optional. Purely labels for your own tracking — nothing is shared and no e-mail is ever sent.
@@ -104,6 +108,7 @@ Everything above still works — timers, planner, reports, printable records —
 - **Attendance** per session, rolled up per player. Percentages count only sessions marked *Played*, so a scheduled session is never a no-show.
 - **A campaign log** — a third export option that prints one campaign as a chronological record: the cast with attendance, the arcs with time against each, and every session with its date, activity, arcs, who was present and how long it ran.
 - **Documents** file under `Sessions/` and `Plot arcs/` instead.
+- **Campaign cost** is an activity type for one-off spending — a VTT licence, a rulebook, dice. Campaigns get the Cost field but not accounts; a table's spending is one-off rather than a balance.
 
 Switching a container between modes re-maps statuses and activities by position, and switching back restores them. Names, notes, dates, arc links, cast and logged time are never touched.
 
