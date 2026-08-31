@@ -2634,7 +2634,7 @@ function blankReport() {
   return {
     containers: 0, projects: 0, tasks: 0, entries: 0, members: 0,
     milestones: 0, accounts: 0, characters: 0, blocks: 0, docs: 0,
-    sameName: [], skippedExisting: 0
+    sameName: [], skippedExisting: 0, closed: 0, closedNames: []
   };
 }
 
@@ -2734,6 +2734,17 @@ function mergeInto(incoming, apply) {
         // are - only its append-only records are topped up, because a logged
         // session and an attached file are facts rather than opinions.
         r.skippedExisting++;
+
+        // The single exception. Finishing something only happens once, so if
+        // either copy says the work is done, that copy knows something the
+        // other does not. This runs both ways round, which means a merge can
+        // close a task but can never quietly reopen one.
+        if (!isTaskClosed(lt) && isTaskClosed(it)) {
+          r.closed++;
+          if (r.closedNames.length < 6) r.closedNames.push(lt.title);
+          if (apply) lt.status = it.status;
+        }
+
         if (apply) {
           addMissing(lt.entries, it.entries, r, "entries");
           addMissing(lt.docs, it.docs, r, "docs");
@@ -2780,21 +2791,30 @@ function mergeBackup(file) {
 
     const preview = mergeInto(data, false);
     const bits = reportLines(preview);
-    if (!bits.length) {
+    if (!bits.length && !preview.closed) {
       alert("Nothing to merge.\n\nEverything in that backup is already here.");
       return;
     }
 
-    let msg = "Merge will ADD:\n\n  " + bits.join("\n  ") + "\n\n";
+    let msg = "";
+    if (bits.length) msg += "Merge will ADD:\n\n  " + bits.join("\n  ") + "\n\n";
+    if (preview.closed) {
+      msg += "It will also mark " + preview.closed + " existing task" +
+        (preview.closed === 1 ? "" : "s") + " as finished, because the backup has " +
+        (preview.closed === 1 ? "it" : "them") + " completed or cancelled:\n  " +
+        preview.closedNames.join("\n  ") +
+        (preview.closed > preview.closedNames.length
+          ? "\n  ...and " + (preview.closed - preview.closedNames.length) + " more" : "") + "\n\n";
+    }
     if (preview.skippedExisting) {
       msg += preview.skippedExisting + " task" + (preview.skippedExisting === 1 ? "" : "s") +
-        " already here will be left exactly as they are, apart from gaining any logged sessions they were missing.\n\n";
+        " already here keep their own title, notes and dates, gaining only sessions they were missing.\n\n";
     }
     if (preview.sameName.length) {
       msg += "Note: " + preview.sameName.join(", ") + " share a name with a container you already have " +
         "but are not the same one, so you will end up with two of each.\n\n";
     }
-    msg += "Nothing you already have will be changed or deleted.\n\nGo ahead?";
+    msg += "Nothing will be deleted, and nothing already finished will be reopened.\n\nGo ahead?";
 
     if (!confirm(msg)) return;
 
@@ -2802,7 +2822,9 @@ function mergeBackup(file) {
     normalise();
     save();
     render();
-    alert("Merged.\n\n  " + reportLines(done).join("\n  "));
+    const lines = reportLines(done);
+    if (done.closed) lines.push(done.closed + " task" + (done.closed === 1 ? "" : "s") + " marked finished");
+    alert("Merged.\n\n  " + lines.join("\n  "));
   };
   reader.readAsText(file);
 }

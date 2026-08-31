@@ -46,17 +46,26 @@ MERGE is the gentler option. It reads a backup and adds only what you are
 missing: containers, projects, tasks, members, milestones, logged sessions.
 It shows you exactly what it will add and asks before doing anything.
 
-Merge is strictly additive, and it is worth knowing why. Nothing in Ledger
-records when it was last edited, so there is no way to tell whether the copy
-in a backup is newer or older than the one you already have. Rather than
-guess and quietly undo your work, merge never changes or deletes anything
-that is already here.
+Merge adds rather than overwrites, and it is worth knowing why. Nothing in
+Ledger records when it was last edited, so there is no way to tell whether
+the copy in a backup is newer or older than the one you already have. Rather
+than guess and quietly undo your work, merge fills gaps and never deletes.
 
-What that means in practice: if a task exists in both, yours is left exactly
-as it is - your title, your status, your notes - and it only gains logged
-sessions and document links it was missing, because those are records rather
-than opinions. Anything absent is added whole. Everything is matched by its
-internal id, so merging the same file twice adds nothing the second time.
+What that means in practice: if a task exists in both, yours keeps its own
+title, status and notes, and only gains logged sessions and document links
+it was missing, because those are records rather than opinions. Anything
+absent is added whole.
+
+THE ONE EXCEPTION is closure, which is the single case where the answer is
+not a guess. Finishing something only happens once, so if either copy has a
+task or session completed or cancelled, that copy knows something the other
+does not, and the closed status wins. This runs both ways round: a merge can
+close a task, but it can never quietly reopen one you have already finished.
+Any task it is about to close is named in the confirmation before you agree
+to it, so nothing changes behind your back.
+
+Everything is matched by its internal id, so merging the same file twice
+adds nothing the second time.
 
 Use it to bring two machines together, or to recover something you deleted
 without losing everything you have done since. Note that two containers
