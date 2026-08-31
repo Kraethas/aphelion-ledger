@@ -199,6 +199,43 @@ after a restart - that is the browser protecting your disk, not a bug. If you
 move or rename the folder outside Ledger, choose it again.
 
 
+SHARING - ONE WRITER, MANY READERS
+----------------------------------
+The people icon in the header sets what this copy of Ledger is. Off is the
+default and nothing is shared. The other two modes need a folder everyone
+involved can reach - OneDrive, SharePoint or any synced folder - and Chrome or
+Edge on the desktop.
+
+  Publishing   You own this one. Ledger writes a snapshot of your visible
+               containers into the shared folder a few seconds after every
+               change, and again when you press Publish now.
+  Viewing      Somebody else publishes. Ledger reads their snapshot and shows
+               it read-only. Refresh pulls the latest, and it re-checks by
+               itself once a minute.
+
+WHAT VIEWERS SEE is set per container. Open a container's settings and set
+"Visible to viewers" to Yes. Containers left at No are NOT WRITTEN TO THE
+SHARED FILE AT ALL - they never leave your machine. In a folder other people
+can open, absence is the only real way to hide something.
+
+A viewer can read everything published, use the filters, read the reports and
+print records. They cannot start timers, add or change anything, or restore a
+backup.
+
+Two things this is deliberately not:
+
+  * Not access control. Anyone who can open the shared folder can read the
+    published file directly, whatever Ledger shows them. Decide what to
+    publish on that basis, and treat the folder's sharing list as the real
+    boundary.
+  * Not collaboration. Only the owner writes. Viewers cannot log their own
+    time or tick their own attendance.
+
+If you also use Ledger for your own work, viewing somebody else's is safe:
+while viewing, Ledger never writes to your own stored data. Switch Sharing
+back to Off and your own containers come back untouched.
+
+
 FILTERS
 -------
 Every table - tasks, the cast, players, what's due and the report detail - has
