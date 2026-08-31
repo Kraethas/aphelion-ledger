@@ -127,6 +127,22 @@ period you pick. Anything with a cost but no date is reported separately
 rather than silently dropped.
 
 
+MINI CONTROL
+------------
+The stopwatch button in the header opens a small window holding three
+dropdowns - container, project, task - and one Start/Stop button. It is for
+logging time without hunting for the Ledger tab.
+
+In Chrome and Edge it floats ABOVE your other windows, so it stays visible
+while you work in something else. That uses Document Picture-in-Picture, which
+is the only way a web page can sit on top; in other browsers it opens as an
+ordinary small window instead, which behaves the same but can be covered.
+
+It is the same timer as the main window, not a second one. Starting in either
+place shows up in both, and the one-timer-at-a-time rule still applies. Press
+the header button again to close it.
+
+
 PLANNER
 -------
 A companion to the tracking, not a replacement for it. It shows a week at a

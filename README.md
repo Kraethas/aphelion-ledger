@@ -50,6 +50,14 @@ Two rules keep the numbers trustworthy:
 - **Balances are derived, never stored.** Outstanding is recalculated from the payments themselves, so editing or deleting one corrects the balance immediately and it can never drift.
 - **Spent and Still owed are never added together.** Spend is cash basis — counted when money actually leaves — so a charge raises what you owe but isn't spend until you pay it. The CSV marks every cost *counts as spend* yes or no, so the distinction survives into Excel.
 
+## Mini control
+
+The stopwatch button in the header opens a small window with three dropdowns — container, project, task — and one Start/Stop button, for logging time without hunting for the Ledger tab.
+
+In Chrome and Edge it **floats above your other windows** so it stays visible while you work in something else. That uses Document Picture-in-Picture, the only way a web page can sit on top; elsewhere it opens as an ordinary small window that behaves the same but can be covered.
+
+It drives the same timer as the main window rather than a second one — start in either and both show it.
+
 ## Planning the week
 
 The **Planner** is a companion to the tracking, not a replacement for it.
