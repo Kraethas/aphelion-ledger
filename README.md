@@ -60,7 +60,9 @@ The **Planner** is a companion to the tracking, not a replacement for it.
 - **Import an `.ics`** from Outlook and its meetings become blocks, read straight off your disk. All-day and repeating events are skipped and counted for you rather than dropped silently.
 - Blocks from your **other containers** show through greyed out and read-only, so a day reads as your whole day without mixing the containers together.
 
-**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
+- **Logged** puts the time you actually recorded on the same grid. The plan keeps the left of each day column, your real sessions appear on the right in green, and a session still running is outlined rather than filled.
+
+**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. Logged blocks are drawn from your real sessions and can't be dragged or edited from the Planner; they're the record, not the plan. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
 
 ## Reports
 

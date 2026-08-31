@@ -138,9 +138,16 @@ it (including to another day), or its bottom edge to resize. Click a block to
 edit, remove, or start its timer. Click empty space to add a meeting or note
 that lives in your work calendar rather than here.
 
+The LOGGED button puts the time you actually recorded on the same grid. The
+plan keeps the left of each day column and your real sessions appear on the
+right in green, so you can see where the two agreed and where they did not.
+A session still running is outlined rather than filled. Turn it off and the
+plan goes back to the full width.
+
 PLANNED TIME IS NEVER TRACKED TIME. Blocking two hours does not log two hours
-- only timers and manual entries do. The header shows planned against logged
-for the week, which is the point.
+- only timers and manual entries do. Logged blocks are drawn from your real
+sessions and cannot be dragged or edited from here; they are the record, not
+the plan. The header shows planned against logged for the week.
 
 Blocks belonging to your other containers appear greyed out and read-only, and
 sit behind your own so a busy personal week never squeezes your work blocks

@@ -214,6 +214,13 @@ tr.running{background:var(--green-soft)}
   background:var(--panel-2);color:var(--muted);opacity:.72;pointer-events:none;box-shadow:none;
   z-index:1;   /* behind your own blocks, and free to overlap them */
 }
+.block.actual{
+  border:1px solid var(--green);border-left:3px solid var(--green);
+  background:var(--green-soft);color:var(--text);pointer-events:none;z-index:2;box-shadow:none;
+}
+.block.actual .bs{color:var(--green);opacity:.9}
+.block.actual.live{border-style:dashed}
+.btn.sm.on{border-color:var(--accent);color:var(--accent);font-weight:600}
 .block.dragging{opacity:.9;cursor:grabbing;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.28)}
 .block .rz{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize}
 .planpanel .grp{
@@ -3157,10 +3164,13 @@ function plannerHTML() {
 
   // Gather everything visible this week: own blocks plus greyed ghosts from
   // the other containers, so the day reads as your actual day.
+  const showLogged = state.ui.showLogged !== false;
   const perDay = {};
+  const loggedDay = {};
   let plannedMin = 0;
   days.forEach(function (d) {
     const iso = isoOf(d);
+    loggedDay[iso] = showLogged ? actualBlocksFor(c, iso) : [];
     const list = [];
     blocksOn(c, iso).forEach(function (b) {
       list.push({ block: b, ghost: false, owner: c.name });
@@ -3181,6 +3191,10 @@ function plannerHTML() {
     perDay[iso].forEach(function (e) {
       lo = Math.min(lo, toMin(e.block.start));
       hi = Math.max(hi, toMin(e.block.end));
+    });
+    loggedDay[iso].forEach(function (b) {
+      lo = Math.min(lo, toMin(b.start));
+      hi = Math.max(hi, toMin(b.end));
     });
   });
   planView = { loMin: Math.floor(lo / 60) * 60, hiMin: Math.ceil(hi / 60) * 60 };
@@ -3203,6 +3217,9 @@ function plannerHTML() {
     '<div class="grow" style="flex:1"></div>' +
     '<div class="plansum"><span class="muted">Planned</span> <b>' + fmtDur(plannedMin * 60000) + "</b>" +
       '<span class="muted">Logged</span> <b>' + fmtDur(loggedMs) + "</b></div>" +
+    '<button class="btn sm' + (showLogged ? " on" : "") + '" id="loggedToggle" ' +
+      'title="Show the time you actually logged beside the plan">' +
+      (showLogged ? "\u25c9" : "\u25cb") + " Logged</button>" +
     '<button class="btn sm" id="icsBtn" title="Import meetings from an .ics file">Import .ics</button>' +
     '<button class="btn sm primary" id="printBtn" title="Export a printable record of logged time">Export record</button>' +
     "</div></div>";
@@ -3240,9 +3257,13 @@ function plannerHTML() {
         html += '<div class="nowline" style="top:' + ((nm - planView.loMin) / 60 * PX_PER_HOUR) + 'px"></div>';
       }
     }
-    // Two independent layers. Other containers' blocks sit behind and are
-    // allowed to overlap your own, so a busy Personal day never squeezes your
-    // Work blocks into a sliver - each layer only competes with itself.
+    // Two independent layers of plan. Other containers' blocks sit behind and
+    // are allowed to overlap your own, so a busy Personal day never squeezes
+    // your Work blocks into a sliver - each layer only competes with itself.
+    // With logged time shown, the plan keeps the left of the column and what
+    // actually happened takes the right, so the two never contend for the same
+    // space and the comparison reads at a glance.
+    const laneW = showLogged ? 60 : 100;
     const ownEntries = perDay[iso].filter(function (e) { return !e.ghost; });
     const ghostEntries = perDay[iso].filter(function (e) { return e.ghost; });
 
@@ -3251,7 +3272,7 @@ function plannerHTML() {
         const b = e.block;
         const top = (toMin(b.start) - planView.loMin) / 60 * PX_PER_HOUR;
         const h = Math.max(15, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
-        const w = 100 / e.total;
+        const w = laneW / e.total;
         const lab = blockLabel(e.ghost ? e.ownerC : c, b);
         const sub = e.ghost ? e.owner : (lab.sub || "");
         html += '<div class="block' + (b.kind === "event" ? " event" : "") + (e.ghost ? " ghost" : "") + '"' +
@@ -3263,12 +3284,31 @@ function plannerHTML() {
           "</div>";
       });
     });
+
+    // What actually happened. Read-only: this is the record, not the plan.
+    if (showLogged && loggedDay[iso].length) {
+      layoutBlocks(loggedDay[iso].map(function (b) { return { block: b }; }))
+        .forEach(function (e) {
+          const b = e.block;
+          const top = (toMin(b.start) - planView.loMin) / 60 * PX_PER_HOUR;
+          const h = Math.max(13, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
+          const w = (100 - laneW) / e.total;
+          const live = !!b.live;
+          html += '<div class="block actual' + (live ? " live" : "") + '" title="' +
+            esc(b.task.title + " \u00b7 " + b.project.name + " \u00b7 " + fmtDur(b.ms)) + '"' +
+            ' style="top:' + top + "px;height:" + h + "px;left:calc(" + (laneW + e.col * w) +
+            "% + 2px);width:calc(" + w + "% - 4px);\">" +
+            '<div class="bt">' + esc(b.task.title) + "</div>" +
+            '<div class="bs">' + esc(b.start + "\u2013" + b.end) + "</div></div>";
+        });
+    }
     html += "</div>";
   });
   html += "</div></div>";
   html += '<div class="body"><span class="hint">Drag a task from the right onto a day to block time for it. ' +
     "Click empty space to add a meeting or note. Drag a block to move it, or its bottom edge to resize. " +
     "Greyed blocks belong to your other containers and are read-only. " +
+    "Green blocks on the right are time you actually logged. " +
     "<b>Planned time is never counted as tracked time.</b></span></div>";
   html += "</div></div>";
 
@@ -3392,6 +3432,13 @@ function wirePlanner() {
       render();
     };
   });
+
+  const lg = document.getElementById("loggedToggle");
+  if (lg) lg.onclick = function () {
+    state.ui.showLogged = state.ui.showLogged === false;
+    save();
+    render();
+  };
 
   const ics = document.getElementById("icsBtn");
   if (ics) ics.onclick = function () { document.getElementById("icsFile").click(); };
@@ -3599,13 +3646,14 @@ function actualBlocksFor(c, iso) {
   c.projects.forEach(function (p) {
     p.tasks.forEach(function (t) {
       const entries = t.entries.slice();
-      if (isRunningTask(t)) entries.push({ start: state.running.startedAt, end: now() });
+      // Tag only the session in flight, not every session of a running task.
+      if (isRunningTask(t)) entries.push({ start: state.running.startedAt, end: now(), live: true });
       entries.forEach(function (e) {
         const s = Math.max(e.start, dayStart);
         const en = Math.min(e.end, dayEnd);
         if (en <= s) return;
         out.push({
-          project: p, task: t, ms: en - s,
+          project: p, task: t, ms: en - s, live: !!e.live,
           start: toHHMM((s - dayStart) / 60000),
           end: toHHMM((en - dayStart) / 60000),
           startTs: s, endTs: en
