@@ -702,6 +702,12 @@ function taskFieldsFor(c, p, t) {
       empty: "No players yet - add them under Players."
     });
   }
+  if (t) {
+    fields.push({
+      key: "moveTo", label: "Filed under", type: "select",
+      options: projectTargets(), value: c.id + "|" + p.id
+    });
+  }
   fields.push({ key: "notes", label: t ? "Notes" : "Notes (optional)", type: "textarea",
     value: t ? t.notes : "" });
   return fields;
@@ -849,6 +855,7 @@ function normalise() {
       // Financial accounts are deliberately separate from milestones: a
       // milestone is a checkpoint in the work, an account is a balance, and a
       // payment belongs to exactly one account rather than many.
+      p.unfiled = !!p.unfiled;
       p.accounts = Array.isArray(p.accounts) ? p.accounts : [];
       p.accounts.forEach(function (a) {
         a.id = a.id || uid();
@@ -2110,6 +2117,19 @@ function wireProjects() {
           t.cost = Number(v.cost) || 0;
           if (kindOf(c) !== "campaign") t.accountId = v.accountId || "";
           if (kindOf(c) === "campaign") t.attendance = v.attendance || [];
+          const want = String(v.moveTo || "").split("|");
+          if (want.length === 2 && want[1] !== p.id) {
+            const toC = findContainer(want[0]);
+            const toP = toC && toC.projects.find(function (x) { return x.id === want[1]; });
+            if (toP && confirm('Move "' + t.title + '" to ' + toC.name + " / " + toP.name +
+              "?\n\nIts logged time comes with it. Links to this " +
+              LX(c).project.toLowerCase() + "'s " + LX(c).milestones.toLowerCase() +
+              " are cleared, since they do not exist there.")) {
+              moveTask(c, p, t, toC, toP);
+              if (toC !== c) { state.ui.containerId = toC.id; }
+              state.ui.projectId = toP.id;
+            }
+          }
           function finish(assigneeId) {
             t.assigneeId = assigneeId;
             save();
@@ -2265,6 +2285,81 @@ function rangeBounds(key) {
 
 
 
+
+/* =========================================================
+   Filing
+   -----------------------------------------------------------
+   Every task lives inside a project - there is no orphan store,
+   and inventing one would break the timer, the planner and every
+   report, all of which reach a task through its container and
+   project. So a quick capture goes into a real project called
+   Unfiled, and moving it later is an ordinary move.
+   ========================================================= */
+
+const UNFILED_VALUE = "__unfiled__";
+
+function unfiledProject(c, create) {
+  if (!c) return null;
+  let p = c.projects.find(function (x) { return x.unfiled; });
+  if (!p && create) {
+    p = {
+      id: uid(), name: "Unfiled", unfiled: true,
+      description: "Captured in a hurry. Move these somewhere sensible when you get a moment.",
+      person: "", department: "", status: LX(c).statuses[1] || LX(c).statuses[0],
+      docs: [], docFolder: "", roster: [], accounts: [], milestones: [], tasks: []
+    };
+    c.projects.push(p);
+  }
+  return p || null;
+}
+
+/** Every container/project pair, for a "move to" picker. */
+function projectTargets() {
+  const out = [];
+  state.containers.forEach(function (c) {
+    c.projects.forEach(function (pr) {
+      out.push({ value: c.id + "|" + pr.id, label: c.name + "  /  " + pr.name });
+    });
+  });
+  return out;
+}
+
+/**
+ * Move a task between projects, possibly across containers. References that
+ * only make sense where it came from - plot arcs, an account, an assignee or
+ * attendance from another container's member list - are cleaned up by
+ * normalise, which already drops anything that does not resolve.
+ */
+function moveTask(fromC, fromP, task, toC, toP) {
+  if (!task || !toP || fromP === toP) return false;
+  fromP.tasks = fromP.tasks.filter(function (t) { return t.id !== task.id; });
+  toP.tasks.push(task);
+  if (fromC !== toC) {
+    task.arcIds = [];
+    task.accountId = "";
+    task.attendance = [];
+    task.assigneeId = "";        // normalise re-points this at the new container's self
+  } else {
+    task.arcIds = [];            // arcs belong to the project it left
+    task.accountId = "";
+  }
+  // A running timer holds the old address; keep it pointing at the same task.
+  if (state.running && state.running.taskId === task.id) {
+    state.running.containerId = toC.id;
+    state.running.projectId = toP.id;
+  }
+  // So does anything planned against it.
+  state.containers.forEach(function (c) {
+    Object.keys(planOf(c)).forEach(function (iso) {
+      blocksOn(c, iso).forEach(function (b) {
+        if (b.kind === "task" && b.taskId === task.id && c !== toC) b.taskId = "";
+      });
+    });
+  });
+  normalise();
+  return true;
+}
+
 /* =========================================================
    Mini control
    -----------------------------------------------------------
@@ -2311,13 +2406,28 @@ function miniBodyHTML() {
 
   let h = '<div class="m-wrap">';
   h += '<select id="mC">' + opts(state.containers, sel.c, function (x) { return x.name; }) + "</select>";
-  h += '<select id="mP">' + (sel.c && sel.c.projects.length
-        ? opts(sel.c.projects, sel.p, function (x) { return x.name; })
-        : '<option value="">no ' + esc(lex.projects.toLowerCase()) + "</option>") + "</select>";
+  // "Unfiled" is a sentinel rather than a project, so it has to survive a
+  // redraw on its own - miniChoice cannot resolve it to a real project.
+  const unfiledChosen = !!(state.ui.mini && state.ui.mini.projectId === UNFILED_VALUE);
+  h += '<select id="mP">' +
+        (sel.c && sel.c.projects.length
+          ? opts(sel.c.projects, unfiledChosen ? null : sel.p, function (x) { return x.name; })
+          : "") +
+        '<option value="' + UNFILED_VALUE + '"' + (unfiledChosen ? " selected" : "") +
+          ">\u2014 Unfiled \u2014</option>" +
+        "</select>";
   h += '<select id="mT">' + (sel.p && sel.p.tasks.length
         ? opts(sel.p.tasks.filter(function (x) { return !isTaskClosed(x); }).concat(
                sel.p.tasks.filter(isTaskClosed)), sel.t, function (x) { return x.title; })
         : '<option value="">no ' + esc(lex.tasks.toLowerCase()) + "</option>") + "</select>";
+
+  const adding = !!state.ui.miniAdding;
+  h += '<div class="m-add">' +
+    (adding
+      ? '<input id="mNew" type="text" placeholder="New task name" value="' +
+        esc(state.ui.miniName || "") + '">'
+      : '<button id="mAdd" class="m-link">+ New task</button>') +
+    "</div>";
 
   h += '<div class="m-now">' + (run && runTask
         ? '<span class="m-dot"></span><span class="m-name">' + esc(runTask.title) + "</span>"
@@ -2337,6 +2447,13 @@ const MINI_CSS = `
   select{width:100%;padding:5px 7px;border-radius:6px;border:1px solid rgba(255,255,255,.18);
          background:#242a35;color:#efebe3;font:inherit}
   select:focus{outline:2px solid rgba(210,164,91,.45);border-color:#d2a45b}
+  .m-add{min-height:22px}
+  .m-add input{width:100%;padding:5px 7px;border-radius:6px;border:1px solid #d2a45b;
+               background:#242a35;color:#efebe3;font:inherit}
+  .m-add input:focus{outline:2px solid rgba(210,164,91,.45)}
+  .m-link{background:none;border:0;color:#d2a45b;font:inherit;font-size:12px;font-weight:600;
+          padding:2px 0;width:auto;cursor:pointer;text-align:left}
+  .m-link:hover{text-decoration:underline}
   .m-now{display:flex;align-items:center;gap:6px;min-height:18px;font-size:12px;margin-top:2px}
   .m-dot{width:8px;height:8px;border-radius:50%;background:#4ec27f;flex:none;
          animation:mp 1.6s infinite}
@@ -2376,17 +2493,66 @@ function miniRender() {
     state.ui.mini.taskId = mT.value;
     miniRender();
   };
-  if (mB) mB.onclick = function () {
-    if (state.running) {
-      stopTimer();
-    } else {
-      const sel = miniChoice();
-      if (!sel.c || !sel.p || !sel.t) return;
-      state.ui.mini = { containerId: sel.c.id, projectId: sel.p.id, taskId: sel.t.id };
-      startTimer(sel.c.id, sel.p.id, sel.t.id);
-    }
+  const mAdd = doc.getElementById("mAdd");
+  const mNew = doc.getElementById("mNew");
+  if (mAdd) mAdd.onclick = function () {
+    state.ui.miniAdding = true;
+    state.ui.miniName = "";
     miniRender();
+    const el = miniWin.document.getElementById("mNew");
+    if (el) el.focus();
   };
+  if (mNew) {
+    mNew.oninput = function () { state.ui.miniName = mNew.value; };
+    mNew.onkeydown = function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); miniStart(); }
+      if (ev.key === "Escape") {
+        state.ui.miniAdding = false;
+        state.ui.miniName = "";
+        miniRender();
+      }
+    };
+  }
+
+  if (mB) mB.onclick = function () {
+    if (state.running) { stopTimer(); miniRender(); return; }
+    miniStart();
+  };
+}
+
+/** Start whatever the panel is currently pointing at, creating it if needed. */
+function miniStart() {
+  const doc = miniOpen() ? miniWin.document : null;
+  const sel = miniChoice();
+  const wantUnfiled = doc && doc.getElementById("mP") &&
+    doc.getElementById("mP").value === UNFILED_VALUE;
+  const c = sel.c;
+  if (!c) return;
+
+  const name = (state.ui.miniName || "").trim();
+  let p = wantUnfiled ? unfiledProject(c, true) : sel.p;
+  if (!p && name) p = unfiledProject(c, true);
+  if (!p) return;
+
+  let t = sel.t;
+  if (name) {
+    t = {
+      id: uid(), title: name, type: LX(c).defaultType, status: LX(c).taskStatuses[1] || LX(c).taskStatuses[0],
+      assigneeId: selfMember(c).id, started: "", due: "", arcIds: [], attendance: [],
+      docs: [], cost: 0, accountId: "", notes: "", entries: []
+    };
+    p.tasks.push(t);
+    state.ui.miniAdding = false;
+    state.ui.miniName = "";
+  } else if (wantUnfiled) {
+    t = p.tasks.filter(function (x) { return !isTaskClosed(x); })[0] || p.tasks[0];
+  }
+  if (!t) return;
+
+  state.ui.mini = { containerId: c.id, projectId: p.id, taskId: t.id };
+  save();
+  startTimer(c.id, p.id, t.id);
+  miniRender();
 }
 
 /** Keep the small clock ticking without redrawing the whole panel. */

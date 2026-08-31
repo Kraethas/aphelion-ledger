@@ -138,6 +138,17 @@ while you work in something else. That uses Document Picture-in-Picture, which
 is the only way a web page can sit on top; in other browsers it opens as an
 ordinary small window instead, which behaves the same but can be covered.
 
++ NEW TASK lets you name something and start timing it without deciding where
+it belongs. Pick "- Unfiled -" as the project and the task is created in an
+Unfiled project in that container, which Ledger makes the first time you need
+it. Type the name, press Enter, and the clock is running.
+
+FILED UNDER, in a task's edit dialog, is how you put it where it belongs
+later. It lists every container and project, and moving a task takes its
+logged time with it. Links that only made sense where it came from - plot
+arcs, an account, attendance from another container's players - are cleared,
+because they do not exist at the destination.
+
 It is the same timer as the main window, not a second one. Starting in either
 place shows up in both, and the one-timer-at-a-time rule still applies. Press
 the header button again to close it.
