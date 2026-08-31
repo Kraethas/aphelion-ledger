@@ -166,7 +166,7 @@ So use **Backup** — it writes a `.json` file with everything in it, and **Rest
 
 If a task exists in both, yours keeps its own title, status and notes, and only gains logged sessions and document links it was missing, because those are records rather than opinions.
 
-There is one exception, and it is the one case where the answer isn't a guess. Finishing something only happens once, so if either copy has a task completed or cancelled, that copy knows something the other doesn't and the closed status wins. This runs both ways round: merge can close a task, but it can never quietly reopen one you have already finished. Any task it is about to close is named in the confirmation first.
+There is one exception, and it is the one case where the answer isn't a guess. Finishing something only happens once. If either copy has a task completed or cancelled, or a milestone ticked as reached, that copy knows something the other doesn't, and done wins. This runs both ways round: merge can close a task or tick a milestone, but it can never quietly reopen or untick work you have already finished. Anything it is about to close or tick is named in the confirmation first.
 
 Everything is matched by id, so merging the same file twice adds nothing the second time.
 

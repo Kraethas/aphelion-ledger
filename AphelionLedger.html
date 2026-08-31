@@ -2623,18 +2623,26 @@ function miniPopupFallback(ready) {
    Nothing in Ledger carries a modification time, so there is no
    way to tell whether an incoming copy of something is newer or
    older than the one already here. Rather than guess and quietly
-   revert your work, merge is strictly additive: it can add, and
-   it can never change or remove anything that already exists.
+   revert your work, merge fills gaps and never deletes.
+
+   The exception is finishing. A task being closed or a milestone
+   being reached happens once and does not come back, so whichever
+   copy says it is done knows something the other does not. That
+   runs in both directions, which is what stops a merge from ever
+   reopening or unticking work you have already completed.
 
    Everything is matched on its id, so merging the same file
    twice adds nothing the second time.
    ========================================================= */
 
+const NL = String.fromCharCode(10);
+
 function blankReport() {
   return {
     containers: 0, projects: 0, tasks: 0, entries: 0, members: 0,
     milestones: 0, accounts: 0, characters: 0, blocks: 0, docs: 0,
-    sameName: [], skippedExisting: 0, closed: 0, closedNames: []
+    sameName: [], skippedExisting: 0, closed: 0, closedNames: [],
+    ticked: 0, tickedNames: []
   };
 }
 
@@ -2723,6 +2731,17 @@ function mergeInto(incoming, apply) {
         (ip.roster || []).forEach(function (x) { if (!byId(lp.roster, x.id)) r.characters++; });
       }
 
+      // A milestone being reached is the same shape of fact as a task being
+      // finished, so it travels the same way: done wins, and a merge can
+      // never untick something you have already reached.
+      (ip.milestones || []).forEach(function (im) {
+        const lm = byId(lp.milestones, im.id);
+        if (!lm || lm.done || !im.done) return;
+        r.ticked++;
+        if (r.tickedNames.length < 6) r.tickedNames.push(lm.label);
+        if (apply) lm.done = true;
+      });
+
       (ip.tasks || []).forEach(function (it) {
         const lt = byId(lp.tasks, it.id);
         if (!lt) {
@@ -2791,7 +2810,7 @@ function mergeBackup(file) {
 
     const preview = mergeInto(data, false);
     const bits = reportLines(preview);
-    if (!bits.length && !preview.closed) {
+    if (!bits.length && !preview.closed && !preview.ticked) {
       alert("Nothing to merge.\n\nEverything in that backup is already here.");
       return;
     }
@@ -2806,6 +2825,13 @@ function mergeBackup(file) {
         (preview.closed > preview.closedNames.length
           ? "\n  ...and " + (preview.closed - preview.closedNames.length) + " more" : "") + "\n\n";
     }
+    if (preview.ticked) {
+      msg += "It will tick " + preview.ticked + " " +
+        (preview.ticked === 1 ? "milestone or plot arc" : "milestones or plot arcs") +
+        " as reached:" + NL + "  " + preview.tickedNames.join(NL + "  ") +
+        (preview.ticked > preview.tickedNames.length
+          ? NL + "  ...and " + (preview.ticked - preview.tickedNames.length) + " more" : "") + NL + NL;
+    }
     if (preview.skippedExisting) {
       msg += preview.skippedExisting + " task" + (preview.skippedExisting === 1 ? "" : "s") +
         " already here keep their own title, notes and dates, gaining only sessions they were missing.\n\n";
@@ -2814,7 +2840,7 @@ function mergeBackup(file) {
       msg += "Note: " + preview.sameName.join(", ") + " share a name with a container you already have " +
         "but are not the same one, so you will end up with two of each.\n\n";
     }
-    msg += "Nothing will be deleted, and nothing already finished will be reopened.\n\nGo ahead?";
+    msg += "Nothing will be deleted, and nothing already finished will be reopened or unticked.\n\nGo ahead?";
 
     if (!confirm(msg)) return;
 
@@ -2823,6 +2849,7 @@ function mergeBackup(file) {
     save();
     render();
     const lines = reportLines(done);
+    if (done.ticked) lines.push(done.ticked + " milestone" + (done.ticked === 1 ? "" : "s") + " ticked");
     if (done.closed) lines.push(done.closed + " task" + (done.closed === 1 ? "" : "s") + " marked finished");
     alert("Merged.\n\n  " + lines.join("\n  "));
   };
