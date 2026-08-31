@@ -71,9 +71,17 @@ Each task also carries:
               Prep, Worldbuilding, Maps & Assets and Rules Reading from Live
               Session.
   Status      Not Started, In Progress, Waiting on Other Person/Team,
-              In Review / Approval, Paused, Completed, Cancelled. In roleplay:
-              Scheduled, Confirmed, Awaiting Players, Prepped, Played,
-              Postponed, Cancelled.
+              In Review / Approval, Paused, Completed, Cancelled, Recurring.
+              In roleplay: Scheduled, Confirmed, Awaiting Players, Prepped,
+              Played, Postponed, Cancelled, Recurring.
+
+              RECURRING is for standing commitments that never finish - a
+              daily stand-up, a weekly steering call, a weekly game. Give it
+              no due date and it stays out of What's due instead of nagging
+              you every day, while its timer still accumulates every time you
+              run it. It is counted separately from open work, so a project
+              header reads "5 tasks (2 open . 2 recurring)" rather than
+              letting standing items inflate a to-do count that never falls.
   Assigned to someone from the container's member list. A label for your own
               tracking - nothing is shared and no e-mail is ever sent.
   Dates       a start date and a due date (the session date in roleplay).

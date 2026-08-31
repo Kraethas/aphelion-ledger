@@ -33,7 +33,8 @@ The first time you open it, it asks what you're tracking and sets itself up acco
 Every task has its own **start/stop timer**. Only one runs at a time, so time can never be double-counted, and a running timer survives closing the browser — it keeps counting until you stop it.
 
 - A **type of work** on every task, so you can answer *where did the week actually go*.
-- A **status**: Not Started, In Progress, Waiting on Other Person/Team, In Review / Approval, Paused, Completed, Cancelled.
+- A **status**: Not Started, In Progress, Waiting on Other Person/Team, In Review / Approval, Paused, Completed, Cancelled, **Recurring**.
+- **Recurring** is for standing commitments that never finish — a daily stand-up, a weekly steering call, a weekly game. Leave the due date empty and it stays out of *What's due* rather than nagging you daily, while its timer still accumulates every time you run it. It's counted apart from open work, so a header reads *5 tasks (2 open · 2 recurring)* instead of letting standing items inflate a to-do count that never comes down.
 - An **assignment** to someone from the container's member list — useful mainly for seeing who owes you an answer.
 - **Start and due dates**, which turn amber in their final week and red once overdue.
 - **Manual entry** for work done away from the timer, and a session log so you can delete the timer you left running overnight.

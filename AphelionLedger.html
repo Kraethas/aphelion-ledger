@@ -135,6 +135,7 @@ main{flex:1 1 auto;overflow:auto;padding:16px;display:block}
 .t-pause{background:var(--panel-2);color:var(--muted);border:1px dashed var(--border-strong,var(--muted))}
 .t-done{background:var(--green-soft);color:var(--green)}
 .t-cancel{background:var(--red-soft);color:var(--red)}
+.t-recur{background:var(--panel-2);color:var(--info);border:1px dashed var(--info)}
 
 /* assignment + dates in the task table */
 .who{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
@@ -484,7 +485,8 @@ const TASK_STATUSES = [
   "In Review / Approval",
   "Paused",
   "Completed",
-  "Cancelled"
+  "Cancelled",
+  "Recurring"
 ];
 
 const TASK_STATUS_CLASS = {
@@ -494,7 +496,8 @@ const TASK_STATUS_CLASS = {
   "In Review / Approval": "t-rev",
   "Paused": "t-pause",
   "Completed": "t-done",
-  "Cancelled": "t-cancel"
+  "Cancelled": "t-cancel",
+  "Recurring": "t-recur"
 };
 
 /* Statuses that take a task off your plate - used for "open" counts and styling. */
@@ -513,11 +516,13 @@ const CAMPAIGN_STATUS_CLASS = {
 };
 
 const SESSION_STATUSES = [
-  "Scheduled", "Confirmed", "Awaiting Players", "Prepped", "Played", "Postponed", "Cancelled"
+  "Scheduled", "Confirmed", "Awaiting Players", "Prepped", "Played", "Postponed", "Cancelled",
+  "Recurring"
 ];
 const SESSION_STATUS_CLASS = {
   "Scheduled": "t-ns", "Confirmed": "t-prog", "Awaiting Players": "t-wait",
-  "Prepped": "t-rev", "Played": "t-done", "Postponed": "t-pause", "Cancelled": "t-cancel"
+  "Prepped": "t-rev", "Played": "t-done", "Postponed": "t-pause", "Cancelled": "t-cancel",
+  "Recurring": "t-recur"
 };
 
 const SESSION_TYPES = [
@@ -539,6 +544,13 @@ const CHAR_STATE_CLASS = { "Active": "t-done", "Retired": "t-pause", "Deceased":
 
 /* Statuses that take an item off the board, across both vocabularies. */
 const CLOSED_STATUSES = ["Completed", "Cancelled", "Played"];
+
+/**
+ * A standing commitment - a daily stand-up, a weekly game. It never finishes,
+ * so it is not closed, but counting it as an open to-do would inflate the
+ * figure permanently and it would never come down.
+ */
+function isTaskRecurring(t) { return t.status === "Recurring"; }
 
 const LEX = {
   work: {
@@ -1360,7 +1372,10 @@ function emptyDetailHTML() {
 function projectDetailHTML(p) {
   const lex = LX();
   const total = projectTotalMs(p);
-  const openTasks = p.tasks.filter(function (t) { return !isTaskClosed(t); }).length;
+  const recurringTasks = p.tasks.filter(isTaskRecurring).length;
+  const openTasks = p.tasks.filter(function (t) {
+    return !isTaskClosed(t) && !isTaskRecurring(t);
+  }).length;
 
   /* --- details card --- */
   let html =
@@ -1376,7 +1391,8 @@ function projectDetailHTML(p) {
           '<div class="kpi"><div class="v mono" data-live-project="' + p.id + '">' + fmtDur(total) + "</div><div class=\"k\">Total tracked</div></div>" +
           '<div class="kpi"><div class="v mono">' + fmtHours(total) + '</div><div class="k">Hours (decimal)</div></div>' +
           '<div class="kpi"><div class="v mono">' + p.tasks.length + '</div><div class="k">' +
-            esc(lex.tasks) + " (" + openTasks + " open)</div></div>" +
+            esc(lex.tasks) + " (" + openTasks + " open" +
+            (recurringTasks ? " \u00b7 " + recurringTasks + " recurring" : "") + ")</div></div>" +
           '<div class="kpi"><div class="v mono">' + p.milestones.filter(function (m) { return !m.done; }).length +
             '</div><div class="k">Open ' + esc(lex.milestones.toLowerCase()) + "</div></div>" +
           '<div class="kpi"><div class="v mono">' + money(projectSpent(p), activeContainer()) +
