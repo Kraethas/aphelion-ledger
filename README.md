@@ -26,7 +26,7 @@ The first time you open it, it asks what you're tracking and sets itself up acco
 
 **Containers** are separate worlds — *Work*, *Personal*, *My Campaigns*. Each holds its own projects, its own people, its own planner and its own currency. Each is either a Work container or a Roleplay one.
 
-**Projects** (*Campaigns*) hold the work. **Tasks** (*Sessions*) hold the doing. **Milestones** (*Plot arcs*) mark the shape of it.
+**Projects** (*Campaigns*) hold the work. The list on the left sits in whatever order you drag it into — grab the grip at the left of a row and move it. That order is saved and is the one used everywhere else, printed records included. **Tasks** (*Sessions*) hold the doing. **Milestones** (*Plot arcs*) mark the shape of it.
 
 ## Tracking time
 

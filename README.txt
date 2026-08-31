@@ -50,6 +50,11 @@ own projects, its own people, its own planner and its own currency, and each
 is either a Work container or a Roleplay one. Click the tab you are already on
 to rename it, change what it is for, or delete it.
 
+The project list on the left is in whatever order you put it in. Drag the grip
+handle at the left of a row to move it; the order is saved and is the order
+used everywhere else, including printed records. Clicking a row still just
+selects it.
+
 PROJECTS (Campaigns) hold the work. Each has a person and department it is for
 (Game Master and System in roleplay), a status, a description, and MILESTONES
 (Plot arcs) with due dates that turn amber in their final week and red once
