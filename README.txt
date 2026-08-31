@@ -42,6 +42,28 @@ BACKUP writes a .json file with everything in it. RESTORE reads one back, and
 replaces everything currently in the app - so take a Backup first. This is
 also how you move your data to a new machine.
 
+MERGE is the gentler option. It reads a backup and adds only what you are
+missing: containers, projects, tasks, members, milestones, logged sessions.
+It shows you exactly what it will add and asks before doing anything.
+
+Merge is strictly additive, and it is worth knowing why. Nothing in Ledger
+records when it was last edited, so there is no way to tell whether the copy
+in a backup is newer or older than the one you already have. Rather than
+guess and quietly undo your work, merge never changes or deletes anything
+that is already here.
+
+What that means in practice: if a task exists in both, yours is left exactly
+as it is - your title, your status, your notes - and it only gains logged
+sessions and document links it was missing, because those are records rather
+than opinions. Anything absent is added whole. Everything is matched by its
+internal id, so merging the same file twice adds nothing the second time.
+
+Use it to bring two machines together, or to recover something you deleted
+without losing everything you have done since. Note that two containers
+created separately are different containers even if they share a name, so
+merging can leave you with two called Work; Ledger warns you when that is
+about to happen.
+
 
 THE SHAPE OF IT
 ---------------

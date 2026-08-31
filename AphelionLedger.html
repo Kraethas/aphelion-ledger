@@ -301,6 +301,7 @@ body.viewer [data-doc-del],
 body.viewer .rz,
 body.viewer #addContainerBtn,
 body.viewer #importBtn,
+body.viewer #mergeBtn,
 body.viewer #exportBtn,
 body.viewer #icsBtn,
 body.viewer #runStop,
@@ -441,8 +442,10 @@ tr.duerow:hover{background:var(--accent-soft)}
   <button class="btn sm ghost" id="setupBtn" title="Settings">&#9881;</button>
   <span class="badge" id="storeChip" title="Whether this browser is allowed to save your data locally"></span>
   <button class="btn sm" id="exportBtn">Backup</button>
+  <button class="btn sm" id="mergeBtn" title="Add anything this backup has that you are missing">Merge</button>
   <button class="btn sm" id="importBtn">Restore</button>
   <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+  <input type="file" id="mergeFile" accept="application/json,.json" style="display:none">
   <input type="file" id="icsFile" accept=".ics,text/calendar" style="display:none">
   <input type="file" id="docFile" multiple style="display:none">
 </header>
@@ -2609,6 +2612,199 @@ function miniPopupFallback(ready) {
   }
   w.document.body.innerHTML = "";
   ready(w);
+}
+
+
+/* =========================================================
+   Merge
+   -----------------------------------------------------------
+   Restore replaces everything. Merge fills in what is missing.
+
+   Nothing in Ledger carries a modification time, so there is no
+   way to tell whether an incoming copy of something is newer or
+   older than the one already here. Rather than guess and quietly
+   revert your work, merge is strictly additive: it can add, and
+   it can never change or remove anything that already exists.
+
+   Everything is matched on its id, so merging the same file
+   twice adds nothing the second time.
+   ========================================================= */
+
+function blankReport() {
+  return {
+    containers: 0, projects: 0, tasks: 0, entries: 0, members: 0,
+    milestones: 0, accounts: 0, characters: 0, blocks: 0, docs: 0,
+    sameName: [], skippedExisting: 0
+  };
+}
+
+function countWholeContainer(c, r) {
+  r.containers++;
+  r.members += (c.members || []).length;
+  Object.keys(c.plan || {}).forEach(function (d) { r.blocks += (c.plan[d] || []).length; });
+  (c.projects || []).forEach(function (p) { countWholeProject(p, r); });
+}
+function countWholeProject(p, r) {
+  r.projects++;
+  r.milestones += (p.milestones || []).length;
+  r.accounts += (p.accounts || []).length;
+  r.characters += (p.roster || []).length;
+  (p.tasks || []).forEach(function (t) { countWholeTask(t, r); });
+}
+function countWholeTask(t, r) {
+  r.tasks++;
+  r.entries += (t.entries || []).length;
+  r.docs += (t.docs || []).length;
+}
+
+function byId(list, id) {
+  return (list || []).find(function (x) { return x.id === id; }) || null;
+}
+function addMissing(localList, incomingList, r, key) {
+  (incomingList || []).forEach(function (x) {
+    if (!byId(localList, x.id)) {
+      localList.push(JSON.parse(JSON.stringify(x)));
+      if (key) r[key]++;
+    }
+  });
+}
+
+/**
+ * Walk the incoming backup. With apply false nothing is written and the
+ * report describes what would happen, so it can be shown before committing.
+ */
+function mergeInto(incoming, apply) {
+  const r = blankReport();
+  (incoming.containers || []).forEach(function (ic) {
+    const local = findContainer(ic.id);
+
+    if (!local) {
+      const clash = state.containers.find(function (x) {
+        return x.name.trim().toLowerCase() === String(ic.name || "").trim().toLowerCase();
+      });
+      if (clash) r.sameName.push(ic.name);
+      countWholeContainer(ic, r);
+      if (apply) state.containers.push(JSON.parse(JSON.stringify(ic)));
+      return;
+    }
+
+    // Existing container: only fill gaps.
+    if (apply) addMissing(local.members, ic.members, r, "members");
+    else (ic.members || []).forEach(function (m) { if (!byId(local.members, m.id)) r.members++; });
+
+    Object.keys(ic.plan || {}).forEach(function (day) {
+      const incomingBlocks = ic.plan[day] || [];
+      if (apply) {
+        const localBlocks = blocksOn(local, day).slice();
+        incomingBlocks.forEach(function (b) {
+          if (!byId(localBlocks, b.id)) { localBlocks.push(JSON.parse(JSON.stringify(b))); r.blocks++; }
+        });
+        setDayBlocks(local, day, localBlocks);
+      } else {
+        const localBlocks = blocksOn(local, day);
+        incomingBlocks.forEach(function (b) { if (!byId(localBlocks, b.id)) r.blocks++; });
+      }
+    });
+
+    (ic.projects || []).forEach(function (ip) {
+      const lp = byId(local.projects, ip.id);
+      if (!lp) {
+        countWholeProject(ip, r);
+        if (apply) local.projects.push(JSON.parse(JSON.stringify(ip)));
+        return;
+      }
+      if (apply) {
+        addMissing(lp.milestones, ip.milestones, r, "milestones");
+        addMissing(lp.accounts, ip.accounts, r, "accounts");
+        addMissing(lp.roster, ip.roster, r, "characters");
+      } else {
+        (ip.milestones || []).forEach(function (x) { if (!byId(lp.milestones, x.id)) r.milestones++; });
+        (ip.accounts || []).forEach(function (x) { if (!byId(lp.accounts, x.id)) r.accounts++; });
+        (ip.roster || []).forEach(function (x) { if (!byId(lp.roster, x.id)) r.characters++; });
+      }
+
+      (ip.tasks || []).forEach(function (it) {
+        const lt = byId(lp.tasks, it.id);
+        if (!lt) {
+          countWholeTask(it, r);
+          if (apply) lp.tasks.push(JSON.parse(JSON.stringify(it)));
+          return;
+        }
+        // The task is already here. Its own fields are left exactly as they
+        // are - only its append-only records are topped up, because a logged
+        // session and an attached file are facts rather than opinions.
+        r.skippedExisting++;
+        if (apply) {
+          addMissing(lt.entries, it.entries, r, "entries");
+          addMissing(lt.docs, it.docs, r, "docs");
+        } else {
+          (it.entries || []).forEach(function (e) { if (!byId(lt.entries, e.id)) r.entries++; });
+          (it.docs || []).forEach(function (d) { if (!byId(lt.docs, d.id)) r.docs++; });
+        }
+      });
+    });
+  });
+  return r;
+}
+
+function reportLines(r) {
+  const bits = [];
+  function add(n, one, many) { if (n) bits.push(n + " " + (n === 1 ? one : (many || one + "s"))); }
+  add(r.containers, "container");
+  add(r.projects, "project");
+  add(r.tasks, "task");
+  add(r.entries, "logged session");
+  add(r.members, "member");
+  add(r.milestones, "milestone");
+  add(r.characters, "character");
+  add(r.accounts, "account");
+  add(r.blocks, "planner block");
+  add(r.docs, "document link");
+  return bits;
+}
+
+function mergeBackup(file) {
+  const reader = new FileReader();
+  reader.onload = function () {
+    let data;
+    try {
+      data = JSON.parse(String(reader.result));
+    } catch (e) {
+      alert("That file is not a valid Aphelion Ledger backup.");
+      return;
+    }
+    if (!data || !Array.isArray(data.containers)) {
+      alert("That file does not look like an Aphelion Ledger backup.");
+      return;
+    }
+
+    const preview = mergeInto(data, false);
+    const bits = reportLines(preview);
+    if (!bits.length) {
+      alert("Nothing to merge.\n\nEverything in that backup is already here.");
+      return;
+    }
+
+    let msg = "Merge will ADD:\n\n  " + bits.join("\n  ") + "\n\n";
+    if (preview.skippedExisting) {
+      msg += preview.skippedExisting + " task" + (preview.skippedExisting === 1 ? "" : "s") +
+        " already here will be left exactly as they are, apart from gaining any logged sessions they were missing.\n\n";
+    }
+    if (preview.sameName.length) {
+      msg += "Note: " + preview.sameName.join(", ") + " share a name with a container you already have " +
+        "but are not the same one, so you will end up with two of each.\n\n";
+    }
+    msg += "Nothing you already have will be changed or deleted.\n\nGo ahead?";
+
+    if (!confirm(msg)) return;
+
+    const done = mergeInto(data, true);
+    normalise();
+    save();
+    render();
+    alert("Merged.\n\n  " + reportLines(done).join("\n  "));
+  };
+  reader.readAsText(file);
 }
 
 /* =========================================================
@@ -5102,6 +5298,11 @@ function boot() {
   document.getElementById("miniBtn").onclick = miniLaunch;
   document.getElementById("shareBtn").onclick = openSharing;
   document.getElementById("exportBtn").onclick = exportJSON;
+  document.getElementById("mergeBtn").onclick = function () { document.getElementById("mergeFile").click(); };
+  document.getElementById("mergeFile").onchange = function (e) {
+    if (e.target.files && e.target.files[0]) mergeBackup(e.target.files[0]);
+    e.target.value = "";
+  };
   document.getElementById("importBtn").onclick = function () { document.getElementById("importFile").click(); };
   document.getElementById("importFile").onchange = function (e) {
     if (e.target.files && e.target.files[0]) importJSON(e.target.files[0]);

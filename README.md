@@ -162,6 +162,10 @@ Two consequences worth knowing before you rely on it:
 
 So use **Backup** — it writes a `.json` file with everything in it, and **Restore** reads one back. That's also how you move to a new laptop. Restore replaces everything, so back up first.
 
+**Merge** is the gentler option: it reads a backup and adds only what you're missing, showing you exactly what it will add before it does anything. It's strictly additive by design — nothing in Ledger records when it was last edited, so there's no way to tell whether an incoming copy is newer or older than yours. Rather than guess and quietly undo your work, merge never changes or deletes anything already here.
+
+If a task exists in both, yours is left exactly as it is and only gains logged sessions and document links it was missing, because those are records rather than opinions. Everything is matched by id, so merging the same file twice adds nothing the second time.
+
 ## Requirements
 
 Any current browser — Chrome, Edge or Firefox. Documents alone need Chrome or Edge.
