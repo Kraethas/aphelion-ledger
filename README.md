@@ -89,6 +89,22 @@ Your originals are never moved. A name clash saves as `name (2).ext` rather than
 
 > Documents need the File System Access API, which means **Chrome or Edge on the desktop**. It works from the file itself; no server needed. Firefox and Safari don't offer it, and the app says so plainly rather than half-working. Everything else works in any browser.
 
+## Sharing, one writer and many readers
+
+The people icon in the header turns on a **shared folder** mode: you publish, other people read. It needs a folder everyone can reach (OneDrive, SharePoint, any synced folder) and Chrome or Edge.
+
+- **Publishing** — Ledger writes a snapshot of your visible containers into the folder a few seconds after every change.
+- **Viewing** — Ledger reads someone else's snapshot and shows it read-only, re-checking every minute.
+
+**What viewers see is per container.** A container's settings has *Visible to viewers*; anything left off is **never written to the shared file at all**. It doesn't leave your machine. In a folder other people can open, absence is the only real way to hide something.
+
+Two things this deliberately is not:
+
+- **Not access control.** Anyone who can open the folder can read the published file directly, whatever Ledger shows them. The folder's sharing list is the real boundary.
+- **Not collaboration.** Only the owner writes. Viewers can't log their own time.
+
+If you also use Ledger yourself, viewing someone else's is safe: while viewing, it never writes to your own stored data.
+
 ## Filters
 
 Every data table — tasks, cast, members, what's due, report detail — has a filter row under its headings. Dropdowns for columns with a fixed set of values, listing only what's actually present so no choice is a dead end; free text for names and titles. Filters stack, and a bar reads *Showing 8 of 16 · Clear filters* whenever anything is hidden, so a filtered list is never mistaken for missing data.

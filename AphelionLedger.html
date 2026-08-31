@@ -256,6 +256,46 @@ tr.filters input::placeholder{color:var(--muted);opacity:.7}
 }
 .fnote b{font-variant-numeric:tabular-nums}
 td.nomatch{text-align:center;color:var(--muted);padding:22px 10px;font-size:13px}
+#shareBar{display:none;align-items:center;gap:10px;padding:7px 16px;border-bottom:1px solid var(--border);font-size:13px}
+.sharebar{display:flex;align-items:center;gap:10px;width:100%}
+.sharebar .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.sharebar.view{background:var(--info-soft);color:var(--info)}
+.sharebar.view .dot{background:var(--info)}
+.sharebar.pub{background:var(--accent-soft);color:var(--accent)}
+.sharebar.pub .dot{background:var(--accent);animation:pulse 2.4s infinite}
+.sharebar .muted{color:inherit;opacity:.75}
+
+/* a viewer is looking, not editing */
+body.viewer [data-act],
+body.viewer [data-start],
+body.viewer [data-stop],
+body.viewer [data-add-time],
+body.viewer [data-edit-task],
+body.viewer [data-del-task],
+body.viewer [data-edit-member],
+body.viewer [data-del-member],
+body.viewer [data-ms-edit],
+body.viewer [data-ms-del],
+body.viewer [data-edit-char],
+body.viewer [data-del-char],
+body.viewer [data-edit-account],
+body.viewer [data-del-account],
+body.viewer [data-doc-add],
+body.viewer [data-doc-del],
+body.viewer .rz,
+body.viewer #addContainerBtn,
+body.viewer #importBtn,
+body.viewer #exportBtn,
+body.viewer #icsBtn,
+body.viewer #runStop{display:none !important}
+body.viewer [data-ms-toggle]{pointer-events:none;opacity:.55}
+body.viewer [data-field],
+body.viewer tr.filters select,
+body.viewer tr.filters input{opacity:1}
+body.viewer [data-field]{pointer-events:none;opacity:.8}
+body.viewer .plancol,
+body.viewer .planpanel .pt,
+body.viewer .block{cursor:default}
 .owe{color:var(--amber)}
 .clear{color:var(--green)}
 .kpi.owing{background:var(--amber-soft);border-color:var(--amber)}
@@ -378,6 +418,7 @@ tr.duerow:hover{background:var(--accent-soft)}
     <button class="tab" data-view="members">Members</button>
   </div>
   <div class="sep"></div>
+  <button class="btn sm ghost" id="shareBtn" title="Sharing">&#128101;</button>
   <button class="btn sm ghost" id="setupBtn" title="Settings">&#9881;</button>
   <span class="badge" id="storeChip" title="Whether this browser is allowed to save your data locally"></span>
   <button class="btn sm" id="exportBtn">Backup</button>
@@ -386,6 +427,8 @@ tr.duerow:hover{background:var(--accent-soft)}
   <input type="file" id="icsFile" accept=".ics,text/calendar" style="display:none">
   <input type="file" id="docFile" multiple style="display:none">
 </header>
+
+<div id="shareBar"></div>
 
 <div id="runbar">
   <div class="dot"></div>
@@ -722,6 +765,7 @@ function normalise() {
     c.name = c.name || "Untitled";
     c.kind = c.kind === "campaign" ? "campaign" : "work";
     c.currency = (typeof c.currency === "string" && c.currency.trim()) ? c.currency.trim() : "€";
+    c.shared = !!c.shared;   // opt in, never on by default
     const lex = LEX[c.kind];
     c.projects = Array.isArray(c.projects) ? c.projects : [];
 
@@ -889,8 +933,12 @@ function setStorageChip(ok) {
 }
 
 function save() {
+  // A viewer is looking at somebody else's data. Writing it to this browser
+  // would overwrite their own Ledger, which shares the same storage.
+  if (state && state.viewer) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    schedulePublish();
     if (!storageOK) setStorageChip(true);
   } catch (e) {
     setStorageChip(false);
@@ -986,6 +1034,7 @@ function esc(s) {
    Timer control
    ========================================================= */
 function startTimer(containerId, projectId, taskId) {
+  if (isViewer()) return;
   if (state.running) stopTimer(true);
   state.running = { containerId: containerId, projectId: projectId, taskId: taskId, startedAt: now() };
   // Working on something is the moment it started, so fill these in - but only
@@ -1133,6 +1182,21 @@ function openModal(opts) {
 function render() {
   renderContainerTabs();
   renderRunBar();
+  document.body.classList.toggle("viewer", isViewer());
+  const bar = document.getElementById("shareBar");
+  bar.innerHTML = shareBannerHTML();
+  bar.style.display = bar.innerHTML ? "flex" : "none";
+  const rf = document.getElementById("shareRefresh");
+  if (rf) rf.onclick = function () { refreshViewer(); };
+  const pn = document.getElementById("sharePublish");
+  if (pn) pn.onclick = function () {
+    pn.textContent = "Publishing\u2026";
+    publishNow().then(function (ok) {
+      pn.textContent = "Publish now";
+      if (!ok) alert("Could not write to the shared folder. Choose it again from Settings if it has moved.");
+    });
+  };
+
   const lx = LX();
   document.querySelectorAll("header .tab[data-view]").forEach(function (b) {
     const v = b.getAttribute("data-view");
@@ -1177,6 +1241,7 @@ function renderContainerTabs() {
 }
 
 function containerMenu(id) {
+  if (isViewer()) return;
   const c = findContainer(id);
   if (!c) return;
   openModal({
@@ -1189,13 +1254,16 @@ function containerMenu(id) {
           { value: "work", label: "Work — projects, tasks, departments" },
           { value: "campaign", label: "Roleplay — campaigns, sessions, players" }
         ], value: kindOf(c) },
-      { key: "currency", label: "Currency symbol", value: containerCurrency(c) }
+      { key: "currency", label: "Currency symbol", value: containerCurrency(c) },
+      { key: "shared", label: "Visible to viewers when publishing", type: "select",
+        options: ["No", "Yes"], value: c.shared ? "Yes" : "No" }
     ],
     okLabel: "Save",
     validate: function (v) { return v.name.trim() ? null : "Name cannot be empty."; },
     onSubmit: function (v) {
       c.name = v.name.trim();
       c.currency = v.currency.trim() || "\u20ac";
+      c.shared = v.shared === "Yes";
       if (v.kind !== kindOf(c)) {
         const n = c.projects.length;
         if (n && !confirm("Switching this container to " + LEX[v.kind].kindName.toLowerCase() +
@@ -2106,6 +2174,235 @@ function rangeBounds(key) {
 
 
 
+
+
+/* =========================================================
+   Sharing
+   -----------------------------------------------------------
+   One writer, many readers. The owner publishes a snapshot of
+   the containers they have marked visible into a shared folder;
+   everyone else opens the same file and gets a read-only view.
+
+   Two rules hold this together:
+     - A container that is not marked visible is never written to
+       the file at all. Hiding is absence, not a filter, because a
+       shared folder offers no way to hide anything that is in it.
+     - A viewer never writes to local storage. Someone who also
+       uses Ledger for their own work must be able to look at
+       yours without losing theirs.
+   ========================================================= */
+
+const SHARE_KEY = "personalTimeTracker.share";
+const SHARE_FILE = "published.json";
+const SHARE_DIR = "ledger-data";
+
+function shareCfg() {
+  let cfg = null;
+  try { cfg = JSON.parse(localStorage.getItem(SHARE_KEY) || "null"); } catch (e) { cfg = null; }
+  if (!cfg || typeof cfg !== "object") cfg = {};
+  if (["off", "publish", "view"].indexOf(cfg.mode) < 0) cfg.mode = "off";
+  cfg.publisher = cfg.publisher || "";
+  return cfg;
+}
+function saveShareCfg(cfg) {
+  try { localStorage.setItem(SHARE_KEY, JSON.stringify(cfg)); } catch (e) { /* storage blocked */ }
+}
+function isViewer() { return shareCfg().mode === "view"; }
+function isPublisher() { return shareCfg().mode === "publish"; }
+
+function shareRoot(allowPick) {
+  if (!docsSupported()) return Promise.resolve(null);
+  return rootGet("share:root").then(function (h) {
+    if (h) {
+      return ensurePermission(h).then(function (ok) {
+        return ok ? h : (allowPick === false ? null : pickShareRoot());
+      });
+    }
+    return allowPick === false ? null : pickShareRoot();
+  });
+}
+function pickShareRoot() {
+  return window.showDirectoryPicker({ mode: "readwrite" })
+    .then(function (h) { return rootPut("share:root", h).then(function () { return h; }); })
+    .catch(function (e) {
+      if (e && e.name === "AbortError") return null;
+      alert("That folder could not be opened.\n\n" + (e && e.message ? e.message : e));
+      return null;
+    });
+}
+
+/** Only the containers marked visible, deep-copied so nothing live is shared. */
+function buildSnapshot() {
+  const cfg = shareCfg();
+  const visible = state.containers.filter(function (c) { return c.shared; });
+  const copy = JSON.parse(JSON.stringify(visible));
+  let running = null;
+  if (state.running && visible.some(function (c) { return c.id === state.running.containerId; })) {
+    running = state.running;
+  }
+  return {
+    format: 1,
+    ownerToken: cfg.ownerToken || "",
+    publisher: cfg.publisher || "",
+    publishedAt: now(),
+    data: { version: 1, containers: copy, running: running, settings: { currency: settings().currency } }
+  };
+}
+
+let publishTimer = null;
+let lastPublished = 0;
+
+function schedulePublish() {
+  if (!isPublisher() || !docsSupported()) return;
+  clearTimeout(publishTimer);
+  publishTimer = setTimeout(publishNow, 4000);
+}
+
+function publishNow() {
+  if (!isPublisher()) return Promise.resolve(false);
+  return shareRoot(false).then(function (root) {
+    if (!root) return false;
+    return root.getDirectoryHandle(SHARE_DIR, { create: true })
+      .then(function (dir) { return dir.getFileHandle(SHARE_FILE, { create: true }); })
+      .then(function (fh) { return fh.createWritable(); })
+      .then(function (w) {
+        return w.write(JSON.stringify(buildSnapshot())).then(function () { return w.close(); });
+      })
+      .then(function () {
+        lastPublished = now();
+        const chip = document.getElementById("shareChip");
+        if (chip) chip.textContent = "Published " + new Date(lastPublished)
+          .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return true;
+      });
+  }).catch(function (e) {
+    console.warn("publish failed", e);
+    return false;
+  });
+}
+
+function readSnapshot() {
+  return shareRoot(false).then(function (root) {
+    if (!root) return null;
+    return root.getDirectoryHandle(SHARE_DIR)
+      .then(function (dir) { return dir.getFileHandle(SHARE_FILE); })
+      .then(function (fh) { return fh.getFile(); })
+      .then(function (f) { return f.text(); })
+      .then(function (t) { return JSON.parse(t); });
+  }).catch(function () { return null; });
+}
+
+/** Replace the in-memory state with a published snapshot. Never persists. */
+function applySnapshot(snap) {
+  if (!snap || !snap.data) return false;
+  const keepUi = state && state.ui ? state.ui : {};
+  state = {
+    version: 1,
+    containers: snap.data.containers || [],
+    running: snap.data.running || null,
+    settings: { focus: "both", currency: (snap.data.settings || {}).currency || "\u20ac" },
+    ui: { view: keepUi.view || "projects", range: keepUi.range || "all",
+          containerId: null, projectId: null },
+    viewer: true,
+    publishedAt: snap.publishedAt || 0,
+    publisher: snap.publisher || ""
+  };
+  normalise();
+  return true;
+}
+
+function refreshViewer() {
+  return readSnapshot().then(function (snap) {
+    if (!snap) {
+      alert("No published Ledger was found in that folder.\n\nThe owner may not have published yet, or the folder may be the wrong one.");
+      return false;
+    }
+    applySnapshot(snap);
+    render();
+    return true;
+  });
+}
+
+function shareBannerHTML() {
+  if (isViewer()) {
+    const when = state.publishedAt
+      ? new Date(state.publishedAt).toLocaleString()
+      : "unknown";
+    return '<div class="sharebar view"><span class="dot"></span>' +
+      "<b>Read-only view</b>" +
+      '<span class="muted">' + (state.publisher ? esc(state.publisher) + " \u00b7 " : "") +
+      "published " + esc(when) + "</span>" +
+      '<div class="grow" style="flex:1"></div>' +
+      '<button class="btn sm" id="shareRefresh">Refresh</button></div>';
+  }
+  if (isPublisher()) {
+    const n = state.containers.filter(function (c) { return c.shared; }).length;
+    return '<div class="sharebar pub"><span class="dot"></span>' +
+      "<b>Publishing</b>" +
+      '<span class="muted">' + n + " container" + (n === 1 ? "" : "s") + " visible to viewers</span>" +
+      '<div class="grow" style="flex:1"></div>' +
+      '<span class="small muted" id="shareChip">' +
+        (lastPublished ? "Published " + new Date(lastPublished).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "not published yet") +
+      "</span>" +
+      '<button class="btn sm" id="sharePublish">Publish now</button></div>';
+  }
+  return "";
+}
+
+function openSharing() {
+  const cfg = shareCfg();
+  openModal({
+    title: "Sharing",
+    intro: "One person publishes, everyone else reads. Nothing here is a security control \u2014 anyone who can open the shared folder can read whatever is in it.",
+    fields: [
+      { key: "mode", label: "This copy of Ledger", type: "select", value: cfg.mode, options: [
+        { value: "off", label: "Off \u2014 just mine, nothing shared" },
+        { value: "publish", label: "Publishing \u2014 I own this, others read it" },
+        { value: "view", label: "Viewing \u2014 someone else publishes, I read" }
+      ] },
+      { key: "publisher", label: "Your name, shown to viewers (optional)", value: cfg.publisher,
+        placeholder: "e.g. Nikos" }
+    ],
+    okLabel: "Save",
+    validate: function (v) {
+      if (v.mode !== "off" && !docsSupported()) {
+        return "Sharing needs the File System Access API, which means Chrome or Edge on the desktop.";
+      }
+      return null;
+    },
+    onSubmit: function (v) {
+      const prev = cfg.mode;
+      const next = { mode: v.mode, publisher: v.publisher.trim(), ownerToken: cfg.ownerToken };
+
+      if (v.mode === "off") {
+        saveShareCfg(next);
+        if (prev === "view") { location.reload(); return; }
+        render();
+        return;
+      }
+
+      shareRoot(true).then(function (root) {
+        if (!root) return;
+        if (v.mode === "publish") {
+          return readSnapshot().then(function (existing) {
+            if (existing && existing.ownerToken && cfg.ownerToken && existing.ownerToken !== cfg.ownerToken) {
+              if (!confirm("This folder is already published to by somebody else" +
+                (existing.publisher ? " (" + existing.publisher + ")" : "") +
+                ".\n\nTaking it over will overwrite their published copy. Continue?")) return;
+            }
+            if (!next.ownerToken) next.ownerToken = uid() + uid();
+            saveShareCfg(next);
+            render();
+            return publishNow().then(function () { render(); });
+          });
+        }
+        // viewing
+        saveShareCfg(next);
+        return refreshViewer();
+      });
+    }
+  });
+}
 
 /* =========================================================
    Settings
@@ -3026,6 +3323,7 @@ function wirePlanner() {
   if (pb) pb.onclick = openPrintDialog;
 
   function beginDrag(e, cfg) {
+    if (isViewer()) return;
     planDrag = Object.assign({
       cols: planColRects(), startX: e.clientX, startY: e.clientY, moved: false
     }, cfg);
@@ -3174,7 +3472,7 @@ function wirePlanner() {
   // click empty space to add a meeting or note
   view.querySelectorAll(".plancol").forEach(function (col) {
     col.onpointerdown = function (e) {
-      if (e.button !== 0 || e.target.closest(".block")) return;
+      if (isViewer() || e.button !== 0 || e.target.closest(".block")) return;
       const iso = col.getAttribute("data-iso");
       const startM = Math.min(snapMin(minsAt(col.getBoundingClientRect(), e.clientY)),
         planView.hiMin - DEFAULT_BLOCK_MIN);
@@ -4323,6 +4621,7 @@ function boot() {
   };
 
   document.getElementById("setupBtn").onclick = openSettings;
+  document.getElementById("shareBtn").onclick = openSharing;
   document.getElementById("exportBtn").onclick = exportJSON;
   document.getElementById("importBtn").onclick = function () { document.getElementById("importFile").click(); };
   document.getElementById("importFile").onchange = function (e) {
@@ -4346,6 +4645,31 @@ function boot() {
   render();
   if (state.ui.needsSetup) openFirstRun();
   tickHandle = setInterval(tick, 1000);
+
+  if (isViewer()) {
+    refreshViewer().then(function (ok) {
+      if (!ok) {
+        // Fall back to this person's own Ledger rather than showing nothing.
+        const cfg = shareCfg();
+        cfg.mode = "off";
+        saveShareCfg(cfg);
+        load();
+        render();
+      }
+    });
+    // A published file changes when the owner saves; check every so often.
+    setInterval(function () {
+      if (!isViewer()) return;
+      readSnapshot().then(function (snap) {
+        if (snap && snap.publishedAt && snap.publishedAt !== state.publishedAt) {
+          applySnapshot(snap);
+          render();
+        }
+      });
+    }, 60000);
+  } else if (isPublisher()) {
+    publishNow();
+  }
 }
 
 boot();
