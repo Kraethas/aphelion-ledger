@@ -67,12 +67,13 @@ The **Planner** is a companion to the tracking, not a replacement for it.
 - A **week view**, Monday to Sunday, with a live marker on the current time.
 - **Drag a task onto a day** to block out time. Drag blocks between days, or their bottom edge to resize. Everything snaps to 15 minutes.
 - **Click a block** to edit it, delete it, or start its timer.
+- **Copy last week** brings the week before forward onto the same weekdays. It lists what it found so you can untick the one-offs, skips anything already sitting on that day at that time, and leaves tasks you have finished unticked. What lands is ordinary blocks you can move or delete.
 - **Import an `.ics`** from Outlook and its meetings become blocks, read straight off your disk. All-day and repeating events are skipped and counted for you rather than dropped silently.
 - Blocks from your **other containers** show through greyed out and read-only, so a day reads as your whole day without mixing the containers together.
 
 - **Logged** puts the time you actually recorded on the same grid. The plan keeps the left of each day column, your real sessions appear on the right in green, and a session still running is outlined rather than filled.
 
-**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
+**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. **Add time manually**, on a task, asks for a date, a start time and a duration, so work done away from the timer lands on the planner where it actually happened. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
 
 Logged blocks can't be dragged, because a plan is something you push around and a record is something you correct. Click one and you can set its date, start and finish exactly. That's the fix for the day you forgot to press start, or added the time by hand afterwards and it landed at nine in the morning. A session that ran past midnight shows up on both days and opens as one session whichever half you click, and an end time earlier than its start is read as running into the next day.
 

@@ -204,7 +204,9 @@ A session still running is outlined rather than filled. Turn it off and the
 plan goes back to the full width.
 
 PLANNED TIME IS NEVER TRACKED TIME. Blocking two hours does not log two hours
-- only timers and manual entries do. The header shows planned against logged
+- only timers and manual entries do. ADD TIME MANUALLY, on a task, asks for a
+date, a start time and a duration, so work done away from the timer lands on
+the planner where it actually happened. The header shows planned against logged
 for the week.
 
 Logged blocks cannot be dragged, because a plan is something you push around
@@ -218,6 +220,13 @@ is read as running into the next day.
 Blocks belonging to your other containers appear greyed out and read-only, and
 sit behind your own so a busy personal week never squeezes your work blocks
 into slivers.
+
+COPY LAST WEEK brings the week before forward onto the same weekdays, for the
+standing meetings you would otherwise retype every Monday. It lists what it
+found so you can untick the one-offs, and it leaves tasks you have already
+finished unticked. Anything already sitting on that day at that time is left
+alone, so running it twice is safe. What lands is ordinary blocks you can move
+or delete - there is no repeat rule to argue with later.
 
 IMPORT .ICS reads a calendar file exported from Outlook and turns its meetings
 into blocks. The file is read straight from your disk - nothing is uploaded.

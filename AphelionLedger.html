@@ -306,6 +306,7 @@ body.viewer #importBtn,
 body.viewer #mergeBtn,
 body.viewer #exportBtn,
 body.viewer #icsBtn,
+body.viewer #copyWeekBtn,
 body.viewer #runStop,
 body.viewer #miniBtn,
 body.viewer .pgrip{display:none !important}
@@ -2170,9 +2171,11 @@ function wireProjects() {
       if (!t) return;
       openModal({
         title: "Add time manually",
-        intro: "For work you did away from the timer.",
+        intro: "For work you did away from the timer. The start time decides where it " +
+          "sits on the planner, and you can correct it there later.",
         fields: [
           { key: "date", label: "Date", type: "date", value: todayISO() },
+          { key: "from", label: "Started at (HH:MM)", value: "09:00" },
           { key: "hours", label: "Hours", type: "number", value: "0", min: 0, step: "0.25" },
           { key: "minutes", label: "Minutes", type: "number", value: "30", min: 0, step: "1" }
         ],
@@ -2181,11 +2184,13 @@ function wireProjects() {
           const ms = (Number(v.hours) || 0) * 3600000 + (Number(v.minutes) || 0) * 60000;
           if (ms <= 0) return "Enter an amount of time greater than zero.";
           if (!v.date) return "Pick a date.";
+          if (!/^\d{1,2}:\d{2}$/.test(v.from)) return "The start time must look like 09:30.";
+          if (toMin(v.from) > 1439) return "The start time must fall within the day.";
           return null;
         },
         onSubmit: function (v) {
           const ms = (Number(v.hours) || 0) * 3600000 + (Number(v.minutes) || 0) * 60000;
-          const start = new Date(v.date + "T09:00:00").getTime();
+          const start = fromISO(v.date).getTime() + toMin(v.from) * 60000;
           t.entries.push({ id: uid(), start: start, end: start + ms });
           save();
           render();
@@ -3821,6 +3826,8 @@ function plannerHTML() {
     '<button class="btn sm' + (showLogged ? " on" : "") + '" id="loggedToggle" ' +
       'title="Show the time you actually logged beside the plan">' +
       (showLogged ? "\u25c9" : "\u25cb") + " Logged</button>" +
+    '<button class="btn sm" id="copyWeekBtn" ' +
+      'title="Bring the blocks from the week before forward into this one">Copy last week</button>' +
     '<button class="btn sm" id="icsBtn" title="Import meetings from an .ics file">Import .ics</button>' +
     '<button class="btn sm primary" id="printBtn" title="Export a printable record of logged time">Export record</button>' +
     "</div></div>";
@@ -4031,6 +4038,9 @@ function openBlockEditor(c, iso, b) {
 function wirePlanner() {
   const c = activeContainer();
   const view = document.getElementById("view");
+
+  const cw = view.querySelector("#copyWeekBtn");
+  if (cw) cw.onclick = copyLastWeek;
 
   view.querySelectorAll("[data-week]").forEach(function (b) {
     b.onclick = function () {
@@ -4246,6 +4256,82 @@ function wirePlanner() {
         }
       });
     };
+  });
+}
+
+/**
+ * Standing meetings are the same every week, and typing them in again every
+ * Monday is the chore that stops people using a planner at all.
+ *
+ * This copies a week forward rather than inventing a repeat rule. A repeat
+ * rule has to answer what happens when one week differs - the moved meeting,
+ * the skipped one, the one that ends for good - and every answer adds a way
+ * for the planner to disagree with your week. What lands here is ordinary
+ * blocks, which you can move or delete without arguing with a rule.
+ */
+function copyLastWeek() {
+  const c = activeContainer();
+  const ws = weekStartDate();
+  const prev = addDays(ws, -7);
+
+  const options = [], ticked = [];
+  for (let i = 0; i < 7; i++) {
+    const from = isoOf(addDays(prev, i));
+    blocksOn(c, from).slice()
+      .sort(function (a, b) { return toMin(a.start) - toMin(b.start); })
+      .forEach(function (b) {
+        const lab = blockLabel(c, b);
+        const hit = b.kind === "task" ? findTaskById(c, b.taskId) : null;
+        // A task you have already finished is still offered, just not ticked.
+        const done = b.kind === "task" && (!hit || isTaskClosed(hit.task));
+        const value = from + "|" + b.id;
+        options.push({
+          value: value,
+          label: DAY_NAMES[i] + "  " + b.start + "\u2013" + b.end + "  " + lab.title +
+            (done ? "  (finished)" : "")
+        });
+        if (!done) ticked.push(value);
+      });
+  }
+
+  if (!options.length) {
+    alert("Nothing to copy.\n\nThe week before this one has no blocks in " + c.name + ".");
+    return;
+  }
+
+  openModal({
+    title: "Copy last week",
+    intro: "Each of these moves forward seven days, onto the same weekday. Anything " +
+      "already sitting on that day at that time is left alone, so you can run this twice.",
+    fields: [{ key: "blocks", label: "Bring forward", type: "checks", options: options, value: ticked }],
+    okLabel: "Copy",
+    onSubmit: function (v) {
+      let copied = 0, already = 0;
+      (v.blocks || []).forEach(function (key) {
+        const cut = key.indexOf("|");
+        const fromDay = key.slice(0, cut), id = key.slice(cut + 1);
+        const src = blocksOn(c, fromDay).find(function (x) { return x.id === id; });
+        if (!src) return;
+        const toDay = isoOf(addDays(fromISO(fromDay), 7));
+        const list = blocksOn(c, toDay).slice();
+        const same = list.some(function (x) {
+          return x.kind === src.kind && (x.taskId || "") === (src.taskId || "") &&
+            (x.label || "") === (src.label || "") && x.start === src.start && x.end === src.end;
+        });
+        if (same) { already++; return; }
+        list.push({
+          id: uid(), kind: src.kind, taskId: src.taskId || "", label: src.label || "",
+          start: src.start, end: src.end, note: src.note || ""
+        });
+        setDayBlocks(c, toDay, list);
+        copied++;
+      });
+      save();
+      render();
+      alert(copied + " block" + (copied === 1 ? "" : "s") + " copied." +
+        (already ? "\n\n" + already + " w" + (already === 1 ? "as" : "ere") +
+          " already there and left alone." : ""));
+    }
   });
 }
 
