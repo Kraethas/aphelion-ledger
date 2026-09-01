@@ -221,6 +221,8 @@ tr.running{background:var(--green-soft)}
 }
 .block.actual .bs{color:var(--green);opacity:.9}
 .block.actual.live{border-style:dashed}
+.block.actual.editable{cursor:pointer}
+.block.actual.editable:hover{filter:brightness(1.12);outline:1px solid var(--green)}
 .btn.sm.on{border-color:var(--accent);color:var(--accent);font-weight:600}
 .block.dragging{opacity:.9;cursor:grabbing;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.28)}
 .block .rz{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize}
@@ -3884,7 +3886,9 @@ function plannerHTML() {
       });
     });
 
-    // What actually happened. Read-only: this is the record, not the plan.
+    // What actually happened. Not draggable - a plan is something you push
+    // around, a record is something you correct - but each block opens for
+    // editing, for the days you forget to press start.
     if (showLogged && loggedDay[iso].length) {
       layoutBlocks(loggedDay[iso].map(function (b) { return { block: b }; }))
         .forEach(function (e) {
@@ -3893,8 +3897,13 @@ function plannerHTML() {
           const h = Math.max(13, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
           const w = (100 - laneW) / e.total;
           const live = !!b.live;
-          html += '<div class="block actual' + (live ? " live" : "") + '" title="' +
-            esc(b.task.title + " \u00b7 " + b.project.name + " \u00b7 " + fmtDur(b.ms)) + '"' +
+          const editable = !live && !isViewer() && b.entryId;
+          html += '<div class="block actual' + (live ? " live" : "") +
+            (editable ? " editable" : "") + '"' +
+            (editable ? ' data-entry="' + esc(b.task.id) + "|" + esc(b.entryId) + '"' : "") +
+            ' title="' +
+            esc(b.task.title + " \u00b7 " + b.project.name + " \u00b7 " + fmtDur(b.ms) +
+              (editable ? " - click to correct the times" : "")) + '"' +
             ' style="top:' + top + "px;height:" + h + "px;left:calc(" + (laneW + e.col * w) +
             "% + 2px);width:calc(" + w + "% - 4px);\">" +
             '<div class="bt">' + esc(b.task.title) + "</div>" +
@@ -3907,7 +3916,7 @@ function plannerHTML() {
   html += '<div class="body"><span class="hint">Drag a task from the right onto a day to block time for it. ' +
     "Click empty space to add a meeting or note. Drag a block to move it, or its bottom edge to resize. " +
     "Greyed blocks belong to your other containers and are read-only. " +
-    "Green blocks on the right are time you actually logged. " +
+    "Green blocks on the right are time you actually logged; click one to correct its times. " +
     "<b>Planned time is never counted as tracked time.</b></span></div>";
   html += "</div></div>";
 
@@ -4191,6 +4200,17 @@ function wirePlanner() {
     };
   });
 
+  // correct a logged session
+  view.querySelectorAll("[data-entry]").forEach(function (el) {
+    el.onpointerdown = function (e) { e.stopPropagation(); };
+    el.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const parts = el.getAttribute("data-entry").split("|");
+      editEntry(c, parts[0], parts[1]);
+    };
+  });
+
   // click empty space to add a meeting or note
   view.querySelectorAll(".plancol").forEach(function (col) {
     col.onpointerdown = function (e) {
@@ -4229,6 +4249,60 @@ function wirePlanner() {
   });
 }
 
+/**
+ * Correct the times on a session that was already logged, for the days you
+ * started late, stopped late, or added the time by hand afterwards and it
+ * landed at nine in the morning.
+ */
+function editEntry(c, taskId, entryId) {
+  let proj = null, task = null, entry = null;
+  c.projects.forEach(function (pr) {
+    pr.tasks.forEach(function (t) {
+      if (t.id !== taskId) return;
+      const e = (t.entries || []).find(function (x) { return x.id === entryId; });
+      if (e) { proj = pr; task = t; entry = e; }
+    });
+  });
+  if (!entry) return;
+
+  const sd = new Date(entry.start), ed = new Date(entry.end);
+  const startISO = isoOf(sd);
+  const overnight = isoOf(ed) !== startISO;
+
+  openModal({
+    title: "Logged time",
+    intro: task.title + " \u00b7 " + proj.name + ". This is what you actually did, so it counts " +
+      "towards your totals and reports." +
+      (overnight ? " It currently runs past midnight into the next day." : ""),
+    fields: [
+      { key: "date", label: "Date", type: "date", value: startISO },
+      { key: "start", label: "From (HH:MM)", value: toHHMM(sd.getHours() * 60 + sd.getMinutes()) },
+      { key: "end", label: "To (HH:MM)", value: toHHMM(ed.getHours() * 60 + ed.getMinutes()) }
+    ],
+    okLabel: "Save",
+    validate: function (v) {
+      if (!v.date) return "Pick a date.";
+      if (!/^\d{1,2}:\d{2}$/.test(v.start) || !/^\d{1,2}:\d{2}$/.test(v.end)) {
+        return "Times must look like 09:30.";
+      }
+      if (toMin(v.start) > 1439 || toMin(v.end) > 1440) return "Times must fall within the day.";
+      if (toMin(v.end) === toMin(v.start)) return "The end time must be after the start time.";
+      return null;
+    },
+    onSubmit: function (v) {
+      const base = fromISO(v.date).getTime();
+      const st = base + toMin(v.start) * 60000;
+      let en = base + toMin(v.end) * 60000;
+      // An end that lands before its start is a session that ran past midnight.
+      if (en <= st) en += 86400000;
+      entry.start = st;
+      entry.end = en;
+      save();
+      render();
+    }
+  });
+}
+
 /* =========================================================
    Printable day / week record
    -----------------------------------------------------------
@@ -4255,7 +4329,11 @@ function actualBlocksFor(c, iso) {
           project: p, task: t, ms: en - s, live: !!e.live,
           start: toHHMM((s - dayStart) / 60000),
           end: toHHMM((en - dayStart) / 60000),
-          startTs: s, endTs: en
+          startTs: s, endTs: en,
+          // The block on screen is only the part of the session that falls on
+          // this day. Editing has to reach the whole entry, so carry its id
+          // rather than the clipped times drawn here.
+          entryId: e.id || "", clipped: (s !== e.start || en !== e.end)
         });
       });
     });

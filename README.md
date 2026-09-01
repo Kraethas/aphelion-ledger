@@ -72,7 +72,9 @@ The **Planner** is a companion to the tracking, not a replacement for it.
 
 - **Logged** puts the time you actually recorded on the same grid. The plan keeps the left of each day column, your real sessions appear on the right in green, and a session still running is outlined rather than filled.
 
-**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. Logged blocks are drawn from your real sessions and can't be dragged or edited from the Planner; they're the record, not the plan. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
+**Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
+
+Logged blocks can't be dragged, because a plan is something you push around and a record is something you correct. Click one and you can set its date, start and finish exactly. That's the fix for the day you forgot to press start, or added the time by hand afterwards and it landed at nine in the morning. A session that ran past midnight shows up on both days and opens as one session whichever half you click, and an end time earlier than its start is read as running into the next day.
 
 ## Reports
 

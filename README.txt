@@ -204,9 +204,16 @@ A session still running is outlined rather than filled. Turn it off and the
 plan goes back to the full width.
 
 PLANNED TIME IS NEVER TRACKED TIME. Blocking two hours does not log two hours
-- only timers and manual entries do. Logged blocks are drawn from your real
-sessions and cannot be dragged or edited from here; they are the record, not
-the plan. The header shows planned against logged for the week.
+- only timers and manual entries do. The header shows planned against logged
+for the week.
+
+Logged blocks cannot be dragged, because a plan is something you push around
+and a record is something you correct. Click one and you can set its date,
+start and finish exactly. That is the fix for the day you forgot to press
+start, or added the time by hand afterwards and it landed at nine in the
+morning. A session that ran past midnight is drawn on both days and opens as
+one session whichever half you click, and an end time earlier than its start
+is read as running into the next day.
 
 Blocks belonging to your other containers appear greyed out and read-only, and
 sit behind your own so a busy personal week never squeezes your work blocks
