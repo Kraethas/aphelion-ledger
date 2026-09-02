@@ -221,7 +221,10 @@ tr.running{background:var(--green-soft)}
 }
 .block.actual .bs{color:var(--green);opacity:.9}
 .block.actual.live{border-style:dashed}
-.block.actual.editable{cursor:pointer}
+/* The logged layer is inert by default. An editable block has to opt back
+   into hit-testing, or the click falls through to the column underneath and
+   opens its "add a meeting" dialog instead. */
+.block.actual.editable{cursor:pointer;pointer-events:auto}
 .block.actual.editable:hover{filter:brightness(1.12);outline:1px solid var(--green)}
 .btn.sm.on{border-color:var(--accent);color:var(--accent);font-weight:600}
 .block.dragging{opacity:.9;cursor:grabbing;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.28)}
