@@ -230,6 +230,9 @@ tr.running{background:var(--green-soft)}
   padding:7px 12px;background:var(--panel-2);border-bottom:1px solid var(--border);
   font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:700;color:var(--muted);
 }
+.zoomctl{display:flex;align-items:center;gap:4px}
+.zoomctl .zlab{font-size:11px;color:var(--muted);min-width:34px;text-align:center;
+               font-variant-numeric:tabular-nums}
 .planpanel .grp.over{color:var(--red)}
 .planpanel .pt{padding:9px 12px;border-bottom:1px solid var(--border);cursor:grab;display:flex;flex-direction:column;gap:2px}
 .planpanel .pt:hover{background:var(--panel-2)}
@@ -1177,6 +1180,8 @@ function openModal(opts) {
     html += "</label>";
   });
   html += '</div><div class="foot">' +
+    (opts.danger ? '<button class="btn danger" id="mDanger" style="margin-right:auto">' +
+      esc(opts.danger.label) + "</button>" : "") +
     '<button class="btn" id="mCancel">Cancel</button>' +
     '<button class="btn primary" id="mOk">' + esc(opts.okLabel || "Save") + "</button>" +
     "</div></div>";
@@ -1213,6 +1218,9 @@ function openModal(opts) {
   function onKey(e) {
     if (e.key === "Escape") close();
     if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") { e.preventDefault(); submit(); }
+  }
+  if (opts.danger) {
+    document.getElementById("mDanger").onclick = function () { close(); opts.danger.onSubmit(); };
   }
   document.getElementById("mCancel").onclick = close;
   document.getElementById("mOk").onclick = submit;
@@ -3626,6 +3634,16 @@ function docsHTML(docs, ownerKind, ownerId, emptyText) {
    ========================================================= */
 
 const PX_PER_HOUR = 44;
+// How tall an hour is drawn. A five-minute session is under four pixels at
+// 1x, so anything short needs the grid stretched before it can be read or
+// aimed at - hence a zoom rather than a bigger minimum block height, which
+// would only draw short blocks as taller lies.
+const ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6];
+function planZoom() {
+  const z = Number(state.ui.planZoom);
+  return ZOOMS.indexOf(z) >= 0 ? z : 1;
+}
+function pxPerHour() { return PX_PER_HOUR * planZoom(); }
 const SNAP_MIN = 15;
 const DEFAULT_BLOCK_MIN = 60;
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -3804,7 +3822,7 @@ function plannerHTML() {
     });
   });
   planView = { loMin: Math.floor(lo / 60) * 60, hiMin: Math.ceil(hi / 60) * 60 };
-  const colH = (planView.hiMin - planView.loMin) / 60 * PX_PER_HOUR;
+  const colH = (planView.hiMin - planView.loMin) / 60 * pxPerHour();
 
   const weekFrom = ws.getTime();
   const weekTo = addDays(ws, 7).getTime() - 1;
@@ -3820,6 +3838,13 @@ function plannerHTML() {
     '<button class="btn sm" data-week="0">This week</button>' +
     '<button class="btn sm" data-week="1">&rsaquo;</button>' +
     '<span class="rng">' + esc(rangeLabel) + "</span>" +
+    '<span class="zoomctl">' +
+      '<button class="btn sm" data-zoom="-1" title="Shorter rows"' +
+        (planZoom() === ZOOMS[0] ? " disabled" : "") + ">\u2212</button>" +
+      '<span class="zlab" title="Row height">' + Math.round(planZoom() * 100) + "%</span>" +
+      '<button class="btn sm" data-zoom="1" title="Taller rows, so short sessions can be seen and clicked"' +
+        (planZoom() === ZOOMS[ZOOMS.length - 1] ? " disabled" : "") + ">+</button>" +
+    "</span>" +
     '<div class="grow" style="flex:1"></div>' +
     '<div class="plansum"><span class="muted">Planned</span> <b>' + fmtDur(plannedMin * 60000) + "</b>" +
       '<span class="muted">Logged</span> <b>' + fmtDur(loggedMs) + "</b></div>" +
@@ -3845,8 +3870,10 @@ function plannerHTML() {
 
   // hour gutter
   html += '<div class="gutter" style="height:' + colH + 'px">';
-  for (let m = planView.loMin; m <= planView.hiMin; m += 60) {
-    html += '<div class="hr" style="top:' + ((m - planView.loMin) / 60 * PX_PER_HOUR) + 'px">' + toHHMM(m) + "</div>";
+  // Squeezed rows cannot carry a label an hour, so drop to every second one.
+  const labelStep = pxPerHour() < 30 ? 120 : 60;
+  for (let m = planView.loMin; m <= planView.hiMin; m += labelStep) {
+    html += '<div class="hr" style="top:' + ((m - planView.loMin) / 60 * pxPerHour()) + 'px">' + toHHMM(m) + "</div>";
   }
   html += "</div>";
 
@@ -3855,14 +3882,14 @@ function plannerHTML() {
     html += '<div class="plancol' + (iso === todayISO ? " today" : "") +
       '" data-iso="' + iso + '" style="height:' + colH + 'px">';
     for (let m = planView.loMin; m <= planView.hiMin; m += 30) {
-      const y = (m - planView.loMin) / 60 * PX_PER_HOUR;
+      const y = (m - planView.loMin) / 60 * pxPerHour();
       html += '<div class="hline' + (m % 60 ? " half" : "") + '" style="top:' + y + 'px"></div>';
     }
     if (iso === todayISO) {
       const nd = new Date();
       const nm = nd.getHours() * 60 + nd.getMinutes();
       if (nm >= planView.loMin && nm <= planView.hiMin) {
-        html += '<div class="nowline" style="top:' + ((nm - planView.loMin) / 60 * PX_PER_HOUR) + 'px"></div>';
+        html += '<div class="nowline" style="top:' + ((nm - planView.loMin) / 60 * pxPerHour()) + 'px"></div>';
       }
     }
     // Two independent layers of plan. Other containers' blocks sit behind and
@@ -3878,8 +3905,8 @@ function plannerHTML() {
     [ghostEntries, ownEntries].forEach(function (layer) {
       layoutBlocks(layer).forEach(function (e) {
         const b = e.block;
-        const top = (toMin(b.start) - planView.loMin) / 60 * PX_PER_HOUR;
-        const h = Math.max(15, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
+        const top = (toMin(b.start) - planView.loMin) / 60 * pxPerHour();
+        const h = Math.max(15, (toMin(b.end) - toMin(b.start)) / 60 * pxPerHour());
         const w = laneW / e.total;
         const lab = blockLabel(e.ghost ? e.ownerC : c, b);
         const sub = e.ghost ? e.owner : (lab.sub || "");
@@ -3900,8 +3927,8 @@ function plannerHTML() {
       layoutBlocks(loggedDay[iso].map(function (b) { return { block: b }; }))
         .forEach(function (e) {
           const b = e.block;
-          const top = (toMin(b.start) - planView.loMin) / 60 * PX_PER_HOUR;
-          const h = Math.max(13, (toMin(b.end) - toMin(b.start)) / 60 * PX_PER_HOUR);
+          const top = (toMin(b.start) - planView.loMin) / 60 * pxPerHour();
+          const h = Math.max(13, (toMin(b.end) - toMin(b.start)) / 60 * pxPerHour());
           const w = (100 - laneW) / e.total;
           const live = !!b.live;
           const editable = !live && !isViewer() && b.entryId;
@@ -3923,7 +3950,8 @@ function plannerHTML() {
   html += '<div class="body"><span class="hint">Drag a task from the right onto a day to block time for it. ' +
     "Click empty space to add a meeting or note. Drag a block to move it, or its bottom edge to resize. " +
     "Greyed blocks belong to your other containers and are read-only. " +
-    "Green blocks on the right are time you actually logged; click one to correct its times. " +
+    "Green blocks on the right are time you actually logged; click one to correct or delete it. " +
+    "Use − and + to stretch the rows when sessions are too short to see. " +
     "<b>Planned time is never counted as tracked time.</b></span></div>";
   html += "</div></div>";
 
@@ -3975,7 +4003,7 @@ function colAt(cols, x, y) {
   }) || null;
 }
 function minsAt(rect, y) {
-  const m = planView.loMin + ((y - rect.top) / PX_PER_HOUR) * 60;
+  const m = planView.loMin + ((y - rect.top) / pxPerHour()) * 60;
   return Math.max(planView.loMin, Math.min(planView.hiMin, m));
 }
 
@@ -4039,6 +4067,16 @@ function wirePlanner() {
   const c = activeContainer();
   const view = document.getElementById("view");
 
+  view.querySelectorAll("[data-zoom]").forEach(function (b) {
+    b.onclick = function () {
+      const i = ZOOMS.indexOf(planZoom());
+      const next = ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + Number(b.getAttribute("data-zoom"))))];
+      state.ui.planZoom = next;
+      save();
+      render();
+    };
+  });
+
   const cw = view.querySelector("#copyWeekBtn");
   if (cw) cw.onclick = copyLastWeek;
 
@@ -4098,7 +4136,7 @@ function wirePlanner() {
       const rect = (hit || planDrag.cols.find(function (x) { return x.iso === planDrag.iso; })).rect;
       const mins = snapMin(minsAt(rect, e.clientY - planDrag.grabOffset));
       const dur = planDrag.dur;
-      const top = (Math.min(mins, planView.hiMin - dur) - planView.loMin) / 60 * PX_PER_HOUR;
+      const top = (Math.min(mins, planView.hiMin - dur) - planView.loMin) / 60 * pxPerHour();
       el.style.top = Math.max(0, top) + "px";
       el.classList.add("dragging");
       if (hit && hit.iso !== planDrag.overIso) {
@@ -4110,7 +4148,7 @@ function wirePlanner() {
     } else if (planDrag.mode === "resize") {
       const rect = planDrag.cols.find(function (x) { return x.iso === planDrag.iso; }).rect;
       const endMin = Math.max(planDrag.startMin + SNAP_MIN, snapMin(minsAt(rect, e.clientY)));
-      el.style.height = Math.max(15, (endMin - planDrag.startMin) / 60 * PX_PER_HOUR) + "px";
+      el.style.height = Math.max(15, (endMin - planDrag.startMin) / 60 * pxPerHour()) + "px";
       planDrag.newEnd = endMin;
     }
   }
@@ -4366,6 +4404,19 @@ function editEntry(c, taskId, entryId) {
       { key: "end", label: "To (HH:MM)", value: toHHMM(ed.getHours() * 60 + ed.getMinutes()) }
     ],
     okLabel: "Save",
+    danger: {
+      label: "Delete",
+      onSubmit: function () {
+        if (!confirm("Delete this logged session?\n\n" +
+          toHHMM(sd.getHours() * 60 + sd.getMinutes()) + " to " +
+          toHHMM(ed.getHours() * 60 + ed.getMinutes()) + " on " +
+          sd.toLocaleDateString() + ", " + fmtDur(entry.end - entry.start) +
+          " against " + task.title + ".\n\nIt stops counting towards your totals.")) return;
+        task.entries = task.entries.filter(function (x) { return x.id !== entryId; });
+        save();
+        render();
+      }
+    },
     validate: function (v) {
       if (!v.date) return "Pick a date.";
       if (!/^\d{1,2}:\d{2}$/.test(v.start) || !/^\d{1,2}:\d{2}$/.test(v.end)) {

@@ -75,7 +75,9 @@ The **Planner** is a companion to the tracking, not a replacement for it.
 
 **Planned time is never tracked time.** Blocking two hours logs nothing — only timers and manual entries do. **Add time manually**, on a task, asks for a date, a start time and a duration, so work done away from the timer lands on the planner where it actually happened. The header shows planned against logged, which is the point: you can see where the plan and the week parted company.
 
-Logged blocks can't be dragged, because a plan is something you push around and a record is something you correct. Click one and you can set its date, start and finish exactly. That's the fix for the day you forgot to press start, or added the time by hand afterwards and it landed at nine in the morning. A session that ran past midnight shows up on both days and opens as one session whichever half you click, and an end time earlier than its start is read as running into the next day.
+- **Zoom** (the − and + beside the date range) stretches the rows from 50% to 600%. A five-minute session is under four pixels tall at 100%, so anything short needs the grid pulled open before you can read it or aim at it. The setting sticks.
+
+Logged blocks can't be dragged, because a plan is something you push around and a record is something you correct. Click one and you can set its date, start and finish exactly, or delete it outright — which is what you want when manual entries have left you two overlapping sessions for the same hour. That's the fix for the day you forgot to press start, or added the time by hand afterwards and it landed at nine in the morning. A session that ran past midnight shows up on both days and opens as one session whichever half you click, and an end time earlier than its start is read as running into the next day.
 
 ## Reports
 
