@@ -1861,10 +1861,10 @@ function wireProjects() {
         okLabel: "Create " + lex.project.toLowerCase(),
         validate: function (v) { return v.name.trim() ? null : lex.project + " name is required."; },
         onSubmit: function (v) {
-          const pr = {
-            id: uid(), name: v.name.trim(), person: v.person.trim(), department: v.department.trim(),
-            status: v.status, description: v.description, milestones: [], tasks: [], roster: []
-          };
+          const pr = blankProject(c, {
+            name: v.name.trim(), person: v.person.trim(), department: v.department.trim(),
+            status: v.status, description: v.description
+          });
           c.projects.push(pr);
           state.ui.projectId = pr.id;
           save();
@@ -2098,7 +2098,7 @@ function wireProjects() {
             id: uid(), title: v.title.trim(), type: v.type, status: v.status,
             assigneeId: assigneeId, started: v.started, due: v.due, arcIds: v.arcIds || [],
             attendance: v.attendance || [], cost: Number(v.cost) || 0,
-            accountId: v.accountId || "", notes: v.notes.trim(), entries: []
+            accountId: v.accountId || "", notes: v.notes.trim(), entries: [], docs: []
           });
           save();
           render();
@@ -2319,16 +2319,31 @@ function rangeBounds(key) {
 
 const UNFILED_VALUE = "__unfiled__";
 
+/**
+ * The one place a project is built. Every field normalise expects is set
+ * here, because a project created without them renders once and throws -
+ * and a render that throws halfway leaves the old screen sitting there,
+ * which reads as "nothing happened until I refreshed".
+ */
+function blankProject(c, over) {
+  const pr = {
+    id: uid(), name: "", unfiled: false, description: "",
+    person: "", department: "", status: LX(c).statuses[0],
+    docs: [], docFolder: "", roster: [], accounts: [], milestones: [], tasks: []
+  };
+  Object.keys(over || {}).forEach(function (k) { pr[k] = over[k]; });
+  return pr;
+}
+
 function unfiledProject(c, create) {
   if (!c) return null;
   let p = c.projects.find(function (x) { return x.unfiled; });
   if (!p && create) {
-    p = {
-      id: uid(), name: "Unfiled", unfiled: true,
+    p = blankProject(c, {
+      name: "Unfiled", unfiled: true,
       description: "Captured in a hurry. Move these somewhere sensible when you get a moment.",
-      person: "", department: "", status: LX(c).statuses[1] || LX(c).statuses[0],
-      docs: [], docFolder: "", roster: [], accounts: [], milestones: [], tasks: []
-    };
+      status: LX(c).statuses[1] || LX(c).statuses[0]
+    });
     c.projects.push(p);
   }
   return p || null;
