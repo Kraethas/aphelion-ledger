@@ -177,6 +177,14 @@ it. Type the name, press Enter, and the clock is running.
 
 FILED UNDER, in a task's edit dialog, is how you put it where it belongs
 later. It lists every container and project, and moving a task takes its
+Tasks, milestones and accounts carry the same drag handle as the project
+list, so each list sits in whatever order suits you. Two things worth
+knowing. Task handles disappear while a column filter is on, because a
+filtered table shows only a subset and dragging inside it cannot say where a
+row belongs in the whole list - clear the filter and they come back. And
+finished milestones still sink to the bottom; your order decides everything
+above them.
+
 logged time with it. Links that only made sense where it came from - plot
 arcs, an account, attendance from another container's players - are cleared,
 because they do not exist at the destination.

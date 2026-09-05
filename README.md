@@ -56,7 +56,9 @@ The stopwatch button in the header opens a small window with three dropdowns —
 
 In Chrome and Edge it **floats above your other windows** so it stays visible while you work in something else. That uses Document Picture-in-Picture, the only way a web page can sit on top; elsewhere it opens as an ordinary small window that behaves the same but can be covered.
 
-**+ New task** lets you name something and start timing it without deciding where it belongs: choose *— Unfiled —* as the project and it lands in an Unfiled project Ledger creates the first time you need one. **Filed under**, in a task's edit dialog, moves it somewhere sensible later — it lists every container and project, and the logged time goes with it.
+**+ New task** lets you name something and start timing it without deciding where it belongs: choose *— Unfiled —* as the project and it lands in an Unfiled project Ledger creates the first time you need one. Tasks, milestones and accounts all carry the same drag handle as the project list, so each sits in whatever order suits you. Two things worth knowing: task handles disappear while a column filter is on, because a filtered table shows a subset and dragging inside it can't say where a row belongs in the whole list; and finished milestones still sink to the bottom, with your order deciding everything above them.
+
+**Filed under**, in a task's edit dialog, moves it somewhere sensible later — it lists every container and project, and the logged time goes with it.
 
 It drives the same timer as the main window rather than a second one — start in either and both show it.
 

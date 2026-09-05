@@ -122,12 +122,20 @@ main{flex:1 1 auto;overflow:auto;padding:16px;display:block}
 .pitem.active{background:var(--accent-soft)}
 .pitem .nm{font-weight:600;flex:1;word-break:break-word}
 .pgrip{
+  /* The glyph is a few pixels wide; the padding is what you actually aim at. */
   flex:none;color:var(--muted);opacity:.35;cursor:grab;font-size:12px;line-height:1.1;
-  letter-spacing:-2px;padding:2px 1px 0 0;margin-left:-4px;touch-action:none;user-select:none;
+  letter-spacing:-2px;padding:2px 5px 2px 4px;margin-left:-7px;touch-action:none;user-select:none;
 }
-.pitem:hover .pgrip{opacity:.85}
+.pitem:hover .pgrip,tr:hover .pgrip,.ms:hover .pgrip{opacity:.85}
 .pgrip:active{cursor:grabbing}
 .pitem.dragging{opacity:.65;background:var(--accent-soft);box-shadow:0 4px 14px rgba(0,0,0,.18)}
+/* A dragged table row cannot carry a shadow, so it takes the tint alone. */
+tr.dragging td{background:var(--accent-soft);opacity:.75}
+.ms.dragging{opacity:.65;background:var(--accent-soft);border-radius:6px}
+/* Grip beside the first cell of a row, without disturbing what follows it. */
+.cellgrip{display:flex;align-items:flex-start;gap:5px}
+.cellgrip .pgrip{margin-left:0;padding-top:3px}
+.ms .pgrip{margin-left:0;padding-top:4px}
 .pitem .meta{display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap}
 .badge{font-size:11px;padding:2px 7px;border-radius:99px;white-space:nowrap;font-weight:600}
 .s-ns{background:var(--panel-2);color:var(--muted);border:1px solid var(--border)}
@@ -868,6 +876,13 @@ function normalise() {
       // milestone is a checkpoint in the work, an account is a balance, and a
       // payment belongs to exactly one account rather than many.
       p.unfiled = !!p.unfiled;
+      // Milestones were shown in due-date order and stored in creation order.
+      // Bake what was on screen into the array once, so turning on manual
+      // ordering does not silently rearrange a list someone already knows.
+      if (!p.msOrdered) {
+        p.milestones.sort(milestoneDateSort);
+        p.msOrdered = true;
+      }
       p.accounts = Array.isArray(p.accounts) ? p.accounts : [];
       p.accounts.forEach(function (a) {
         a.id = a.id || uid();
@@ -1386,7 +1401,7 @@ function projectsHTML() {
   } else {
     list = '<div class="plist">' + projects.map(function (pr) {
       return '<div class="pitem' + (p && pr.id === p.id ? " active" : "") + '" data-open="' + pr.id + '">' +
-        '<div class="pgrip" data-grip="' + pr.id + '" title="Drag to reorder">&#8942;&#8942;</div>' +
+        gripHTML("data-grip", pr.id) +
         '<div style="flex:1">' +
           '<div class="nm">' + esc(pr.name) + "</div>" +
           '<div class="meta">' +
@@ -1497,10 +1512,14 @@ function projectDetailHTML(p) {
           const out = accountOutstanding(p, a);
           const moves = accountMovements(p, a.id);
           const d = dueInfo(a.due, out <= 0);
-          let row = "<tr>" +
-            '<td><div class="ttitle arclbl" data-account="' + a.id + '">' + esc(a.name) +
-              '<span class="arccount">' + moves.length + "</span></div>" +
-              (a.note ? '<div class="small muted">' + esc(a.note) + "</div>" : "") + "</td>" +
+          let row = '<tr data-arow="' + esc(a.id) + '">' +
+            '<td><div class="cellgrip">' +
+              (p.accounts.length > 1 ? gripHTML("data-agrip", a.id) : "") +
+              '<div style="flex:1;min-width:0">' +
+              '<div class="ttitle arclbl" data-account="' + a.id + '">' + esc(a.name) +
+                '<span class="arccount">' + moves.length + "</span></div>" +
+                (a.note ? '<div class="small muted">' + esc(a.note) + "</div>" : "") +
+              "</div></div></td>" +
             '<td><span class="type-pill">' + esc(a.kind) + "</span></td>" +
             '<td class="right mono">' + money(a.opening, cur) + "</td>" +
             '<td class="right mono">' + money(accountPaid(p, a), cur) + "</td>" +
@@ -1624,11 +1643,14 @@ function projectDetailHTML(p) {
       { label: "Time", right: true }, { label: "Actions", right: true }
     ];
     const tshown = applyFilters("tasks", tcols, p.tasks);
+    // A filtered table shows a subset, so dragging inside it cannot say where
+    // a row belongs in the whole list. The handles go away until it is clear.
+    const canReorder = !anyFilter("tasks") && p.tasks.length > 1;
     html += filterNoteHTML("tasks", tshown.length, p.tasks.length);
     html += '<div style="overflow:auto"><table>' +
       tableHeadHTML("tasks", tcols, p.tasks) + "<tbody>" +
       (tshown.length
-        ? tshown.map(function (t) { return taskRowHTML(p, t); }).join("")
+        ? tshown.map(function (t) { return taskRowHTML(p, t, canReorder); }).join("")
         : '<tr><td colspan="8" class="nomatch">Nothing matches these filters.</td></tr>') +
       "</tbody></table></div>";
   }
@@ -1636,7 +1658,20 @@ function projectDetailHTML(p) {
   return html;
 }
 
+/**
+ * Finished milestones sink; everything else keeps the order you put it in.
+ * Sorting the open ones by due date would fight the drag handle, and the
+ * handle is the more useful of the two - a plot arc or a phase has an order
+ * that its dates do not describe. normalise bakes the old date order into
+ * the array once, so nothing reshuffles under anyone on upgrade.
+ */
 function milestoneSort(a, b) {
+  if (a.done !== b.done) return a.done ? 1 : -1;
+  return 0;
+}
+
+/** The order milestones used to be shown in, kept for the one-time bake. */
+function milestoneDateSort(a, b) {
   if (a.done !== b.done) return a.done ? 1 : -1;
   if (!a.due) return 1;
   if (!b.due) return -1;
@@ -1656,7 +1691,8 @@ function milestoneHTML(m, p) {
     return (t.arcIds || []).indexOf(m.id) >= 0;
   });
   const open = state.ui.openArc === m.id;
-  let html = '<div class="ms' + (m.done ? " done" : "") + '">' +
+  let html = '<div class="ms' + (m.done ? " done" : "") + '" data-msrow="' + esc(m.id) + '">' +
+    ((p && p.milestones && p.milestones.length > 1) ? gripHTML("data-mgrip", m.id) : "") +
     '<input type="checkbox" data-ms-toggle="' + m.id + '"' + (m.done ? " checked" : "") + ">" +
     '<div class="lbl arclbl" data-arc="' + m.id + '" title="Show linked ' +
       esc(lex.tasks.toLowerCase()) + '">' + esc(m.label) +
@@ -1709,7 +1745,7 @@ function dueInfo(dateStr, closed) {
   return { text: text, cls: "" };
 }
 
-function taskRowHTML(p, t) {
+function taskRowHTML(p, t, canReorder) {
   const running = isRunningTask(t);
   const closed = isTaskClosed(t);
   const entries = t.entries.slice().sort(function (a, b) { return b.start - a.start; });
@@ -1721,8 +1757,11 @@ function taskRowHTML(p, t) {
   const member = findMember(c, t.assigneeId);
   const mine = !!(member && member.self);
   let row =
-    '<tr class="' + (running ? "running" : "") + '">' +
-      '<td><div class="ttitle' + (closed ? " closed" : "") + '">' + esc(t.title) + "</div>" +
+    '<tr class="' + (running ? "running" : "") + '" data-trow="' + esc(t.id) + '">' +
+      '<td><div class="cellgrip">' +
+        (canReorder ? gripHTML("data-tgrip", t.id) : "") +
+        '<div style="flex:1;min-width:0">' +
+        '<div class="ttitle' + (closed ? " closed" : "") + '">' + esc(t.title) + "</div>" +
         (t.notes ? '<div class="small muted">' + esc(t.notes) + "</div>" : "") +
         '<div class="small muted">' + entries.length + " session" + (entries.length === 1 ? "" : "s") +
           (entries.length ? ' · <a href="#" data-entries="' + t.id + '">details</a>' : "") +
@@ -1730,7 +1769,7 @@ function taskRowHTML(p, t) {
             ? ' · <span class="att">' + t.attendance.length + " at the table</span>" : "") +
           ' · <a href="#" data-docs="' + t.id + '">' +
             ((t.docs || []).length ? t.docs.length + " doc" + (t.docs.length === 1 ? "" : "s") : "docs") + "</a>" +
-          "</div></td>" +
+          "</div></div></div></td>" +
       '<td><span class="type-pill">' + esc(t.type) + "</span></td>" +
       '<td><span class="badge ' + LX(c).taskStatusClass[t.status] + '">' + esc(t.status) + "</span></td>" +
       '<td><span class="who">' + (mine
@@ -1783,28 +1822,31 @@ function taskRowHTML(p, t) {
 /* =========================================================
    Wiring: projects view
    ========================================================= */
-function wireProjects() {
-  const view = document.getElementById("view");
-  const c = activeContainer();
-
-  // Reordering the list is just reordering the array behind it. The drag
-  // moves the DOM node and only rewrites the array on drop, so nothing
-  // re-renders mid-gesture and the node being dragged never disappears.
-  view.querySelectorAll("[data-grip]").forEach(function (g) {
+/**
+ * Drag-to-reorder for any list drawn in the order of the array behind it.
+ *
+ * The gesture moves the DOM node and rewrites the array only on drop, so
+ * nothing re-renders mid-drag and the node under the cursor never vanishes.
+ * Rows that are not part of the list - an expanded detail row sitting under
+ * its parent - are skipped, because cfg.item never matches them.
+ */
+function makeReorderable(view, cfg) {
+  view.querySelectorAll(cfg.grip).forEach(function (g) {
     g.onclick = function (e) { e.stopPropagation(); };
     g.onpointerdown = function (e) {
       if (isViewer() || e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
-      const item = g.closest(".pitem");
-      const list = item.parentElement;
+      const item = g.closest(cfg.item);
+      const list = item && item.parentElement;
       if (!item || !list) return;
       let moved = false;
       item.classList.add("dragging");
 
       function onMove(ev) {
         moved = true;
-        const others = Array.from(list.querySelectorAll(".pitem")).filter(function (x) { return x !== item; });
+        const others = Array.from(list.querySelectorAll(cfg.item))
+          .filter(function (x) { return x !== item; });
         let placed = false;
         for (let i = 0; i < others.length; i++) {
           const box = others[i].getBoundingClientRect();
@@ -1821,18 +1863,33 @@ function wireProjects() {
         document.removeEventListener("pointerup", onUp);
         item.classList.remove("dragging");
         if (!moved) return;
-        // Selecting a project on the click that ends a drag would be wrong.
+        // Opening the row on the click that ends a drag would be wrong.
         lastReorder = now();
-        const order = Array.from(list.querySelectorAll(".pitem")).map(function (x) {
-          return x.getAttribute("data-open");
+        const order = Array.from(list.querySelectorAll(cfg.item)).map(function (x) {
+          return x.getAttribute(cfg.id);
         });
-        c.projects.sort(function (a, b) { return order.indexOf(a.id) - order.indexOf(b.id); });
+        cfg.arr().sort(function (a, b) { return order.indexOf(a.id) - order.indexOf(b.id); });
         save();
         render();
       }
       document.addEventListener("pointermove", onMove);
       document.addEventListener("pointerup", onUp);
     };
+  });
+}
+
+/** The handle itself. Same look everywhere, so it reads as the same gesture. */
+function gripHTML(attr, id) {
+  return '<div class="pgrip" ' + attr + '="' + esc(id) + '" title="Drag to reorder">&#8942;&#8942;</div>';
+}
+
+function wireProjects() {
+  const view = document.getElementById("view");
+  const c = activeContainer();
+
+  makeReorderable(view, {
+    grip: "[data-grip]", item: ".pitem", id: "data-open",
+    arr: function () { return c.projects; }
   });
 
   view.querySelectorAll("[data-open]").forEach(function (el) {
@@ -1876,6 +1933,19 @@ function wireProjects() {
 
   const p = activeProject();
   if (!p) return;
+
+  makeReorderable(view, {
+    grip: "[data-tgrip]", item: "tr[data-trow]", id: "data-trow",
+    arr: function () { return p.tasks; }
+  });
+  makeReorderable(view, {
+    grip: "[data-mgrip]", item: ".ms[data-msrow]", id: "data-msrow",
+    arr: function () { return p.milestones; }
+  });
+  makeReorderable(view, {
+    grip: "[data-agrip]", item: "tr[data-arow]", id: "data-arow",
+    arr: function () { return p.accounts; }
+  });
 
   view.querySelectorAll("[data-field]").forEach(function (el) {
     el.onchange = function () {
@@ -1926,6 +1996,7 @@ function wireProjects() {
   };
   view.querySelectorAll("[data-arc]").forEach(function (el) {
     el.onclick = function () {
+      if (now() - lastReorder < 300) return;
       const id = el.getAttribute("data-arc");
       state.ui.openArc = state.ui.openArc === id ? null : id;
       render();
@@ -2023,6 +2094,7 @@ function wireProjects() {
   });
   view.querySelectorAll("[data-account]").forEach(function (el) {
     el.onclick = function () {
+      if (now() - lastReorder < 300) return;
       const id = el.getAttribute("data-account");
       state.ui.openAccount = state.ui.openAccount === id ? null : id;
       render();
